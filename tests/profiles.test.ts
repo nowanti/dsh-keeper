@@ -14,7 +14,7 @@ describe('profile inventory', () => {
   let root = ''
 
   before(async () => {
-    root = await mkdtemp(join(tmpdir(), 'dshkeeper-profile-'))
+    root = await mkdtemp(join(tmpdir(), 'dsh-keeper-profile-'))
     const profile = join(root, 'profiles', 'web')
     await mkdir(join(profile, 'node_modules', 'example-plugin'), { recursive: true })
     await mkdir(join(profile, 'patches'), { recursive: true })

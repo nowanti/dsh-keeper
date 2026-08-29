@@ -2,9 +2,9 @@
 
 ## 结论
 
-`dshkeeper` 应作为独立 CLI 进入生态，不应伪装成 DSH 插件。
+`dsh-keeper` 应作为外置的 DSH generation 与兼容性管理 CLI 进入生态，不应伪装成 DSH 插件。
 
-官方对插件仓库的明确发现机制是 GitHub Topic [`dsh-plugin`](https://github.com/deepseek-ai/deepseek-harness#-plugins)。插件会被 DSH profile 加载，通常声明 `dsh.bundle` 并参与配置合成；`dshkeeper` 的职责恰好要求它在 DSH 或 profile 无法启动时仍能诊断、回滚。因此给本仓库打 `dsh-plugin` Topic、增加空壳 bundle，都会制造错误安装预期并削弱恢复边界。
+官方对插件仓库的明确发现机制是 GitHub Topic [`dsh-plugin`](https://github.com/deepseek-ai/deepseek-harness#-plugins)。插件会被 DSH profile 加载，通常声明 `dsh.bundle` 并参与配置合成；`dsh-keeper` 的职责恰好要求它在 DSH 或 profile 无法启动时仍能诊断、回滚。因此给本仓库打 `dsh-plugin` Topic、增加空壳 bundle，都会制造错误安装预期并削弱恢复边界。
 
 ## 命名决策
 
@@ -15,16 +15,16 @@
 
 `dshup` 也已经被 [`zhangjiabo522/dshup`](https://github.com/zhangjiabo522/dshup) 用作 Windows DSH 桌面客户端。继续复用这些名字会让“遥控 DSH”“启动 DSH”和“安全升级 DSH”三个目标混在同一搜索结果中。
 
-最终名称 `dshkeeper` 表达的是守住一套可恢复、兼容的 DSH generation，而不是替代 pnpm 或只执行一次版本加一。公开仓库已经建立为 [`nowanti/dshkeeper`](https://github.com/nowanti/dshkeeper)；截至 2026-08-29，npm 同名包尚未完成首次登记。
+最终项目、GitHub 仓库与 npm 包统一使用 `dsh-keeper`，主要命令使用更短的 `dshk`，并保留 `dsh-keeper` 作为等价命令。这个名称表达的是守住一套可恢复、兼容的 DSH generation，而不是替代 pnpm 或只执行一次版本加一。公开仓库地址为 [`nowanti/dsh-keeper`](https://github.com/nowanti/dsh-keeper)；截至 2026-08-29，npm 同名包尚未完成首次登记。
 
 ## 发现路径
 
 发布后使用四层入口：
 
-1. npm：包名与二进制都为 `dshkeeper`，关键词包含 `deepseek-harness`、`dsh`、`plugin-manager`、`compatibility`；
+1. npm：包名为 `dsh-keeper`，主要二进制为 `dshk`，并提供 `dsh-keeper` 长命令别名；关键词包含 `deepseek-harness`、`dsh`、`plugin-manager`、`compatibility`；
 2. GitHub：Topics 使用 `deepseek-harness`、`dsh`、`cli`、`plugin-management`、`package-manager`，明确不使用 `dsh-plugin`；
 3. DSH 上游：先发 Discussion 说明问题、事务安全边界和三平台证据；若维护者认可，再提交一个只增加外部工具入口的 README/docs PR；
-4. 插件作者：提供稳定 JSON reason code 文档，让插件 CI 能检查自身 manifest 是否足以被自动升级，而不是要求作者依赖 `dshkeeper` 运行时。
+4. 插件作者：提供稳定 JSON reason code 文档，让插件 CI 能检查自身 manifest 是否足以被自动升级，而不是要求作者依赖 `dsh-keeper` 运行时。
 
 ## 上游提交门槛
 

@@ -22,8 +22,8 @@ interface CommandInvocation {
 }
 
 const WINDOWS_RUNNER = [
-  "$payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:DSHKEEPER_COMMAND_PAYLOAD)) | ConvertFrom-Json",
-  'Remove-Item Env:\\DSHKEEPER_COMMAND_PAYLOAD',
+  "$payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:DSH_KEEPER_COMMAND_PAYLOAD)) | ConvertFrom-Json",
+  'Remove-Item Env:\\DSH_KEEPER_COMMAND_PAYLOAD',
   '$arguments = @($payload.args)',
   '& $payload.command @arguments',
   'exit $LASTEXITCODE',
@@ -47,7 +47,7 @@ export function commandInvocation(
   return {
     command: 'powershell.exe',
     args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_RUNNER],
-    env: { ...env, DSHKEEPER_COMMAND_PAYLOAD: payload },
+    env: { ...env, DSH_KEEPER_COMMAND_PAYLOAD: payload },
   }
 }
 

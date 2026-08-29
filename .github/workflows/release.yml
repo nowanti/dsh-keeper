@@ -38,12 +38,12 @@ jobs:
       - name: Pack npm artifact
         run: |
           npm pack --json > npm-pack.json
-          node -e "const fs=require('fs'); const p=require('./npm-pack.json')[0].filename; fs.renameSync(p,'dshkeeper.tgz')"
+          node -e "const fs=require('fs'); const p=require('./npm-pack.json')[0].filename; fs.renameSync(p,'dsh-keeper.tgz')"
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: dshkeeper.tgz
+          subject-path: dsh-keeper.tgz
       - name: Publish to npm with provenance
-        run: npm publish dshkeeper.tgz --access public --provenance
+        run: npm publish dsh-keeper.tgz --access public --provenance
         env:
           # Used only for the one-time bootstrap publish. Leave the repository
           # secret absent after npm Trusted Publishing is configured; npm then
@@ -52,4 +52,4 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dshkeeper.tgz --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" dsh-keeper.tgz --verify-tag --generate-notes --title "$GITHUB_REF_NAME"

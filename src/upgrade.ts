@@ -222,7 +222,7 @@ export async function stageUpgrade(receipt: AssessmentReceipt, options: StageOpt
   if (changes.length === 0) return null
   const id = options.transactionId ?? randomUUID()
   if (!/^[A-Za-z0-9-]+$/.test(id)) throw new Error(translate(locale, 'error.invalidTransactionId'))
-  const stagingBase = join(receipt.dshHome, 'dshkeeper', 'staging')
+  const stagingBase = join(receipt.dshHome, 'dsh-keeper', 'staging')
   const stagingRoot = join(stagingBase, id)
   if (!pathInside(stagingBase, stagingRoot)) throw new Error(translate(locale, 'error.invalidStagingDirectory'))
   if (existsSync(stagingRoot)) throw new Error(translate(locale, 'error.stagingExists', { id }))
@@ -289,7 +289,7 @@ export async function stageUpgrade(receipt: AssessmentReceipt, options: StageOpt
 }
 
 export function discardStage(plan: Pick<UpgradePlan, 'dshHome' | 'stagingRoot'>, locale: Locale = 'en'): void {
-  const stagingBase = join(plan.dshHome, 'dshkeeper', 'staging')
+  const stagingBase = join(plan.dshHome, 'dsh-keeper', 'staging')
   if (!pathInside(stagingBase, plan.stagingRoot)) throw new Error(translate(locale, 'error.refuseCleanup'))
   rmSync(plan.stagingRoot, { recursive: true, force: true })
 }
@@ -300,7 +300,7 @@ function saveJournal(path: string, journal: TransactionJournal): void {
 }
 
 function replaceFromStage(source: string, target: string, id: string): void {
-  const temporary = join(dirname(target), `.dshkeeper-${id}-${basename(target)}`)
+  const temporary = join(dirname(target), `.dsh-keeper-${id}-${basename(target)}`)
   copyFileSync(source, temporary)
   renameSync(temporary, target)
 }
@@ -342,7 +342,7 @@ export async function applyUpgrade(plan: UpgradePlan, options: ApplyOptions = {}
     if (matches[0] !== undefined) runtimeSpecs.push(matches[0])
   }
 
-  const transactionsRoot = join(plan.dshHome, 'dshkeeper', 'transactions')
+  const transactionsRoot = join(plan.dshHome, 'dsh-keeper', 'transactions')
   const transactionPath = join(transactionsRoot, plan.transactionId)
   if (!pathInside(transactionsRoot, transactionPath)) throw new Error(translate(locale, 'error.invalidTransactionDirectory'))
   if (existsSync(transactionPath)) throw new Error(translate(locale, 'error.transactionExists', { id: plan.transactionId }))

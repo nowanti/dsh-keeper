@@ -70,11 +70,11 @@ function stagedPlan(): UpgradePlan {
   return {
     transactionId: 'test-upgrade',
     dshHome: '/tmp/.dsh',
-    stagingRoot: '/tmp/.dsh/dshkeeper/staging/test-upgrade',
+    stagingRoot: '/tmp/.dsh/dsh-keeper/staging/test-upgrade',
     profiles: [{
       name: 'web',
       livePath: '/tmp/.dsh/profiles/web',
-      stagedPath: '/tmp/.dsh/dshkeeper/staging/test-upgrade/profiles/web',
+      stagedPath: '/tmp/.dsh/dsh-keeper/staging/test-upgrade/profiles/web',
       changes: [{ profile: 'web', package: 'upgrade-me', from: '1.0.0', to: '2.0.0', integrity: 'sha512-test' }],
     }],
     changes: [{ profile: 'web', package: 'upgrade-me', from: '1.0.0', to: '2.0.0', integrity: 'sha512-test' }],
@@ -126,6 +126,18 @@ test('CLI version matches package metadata', async () => {
   const packageVersion = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version
   assert.equal(await main(['--version'], { log: message => logs.push(message), locale: 'en' }), 0)
   assert.equal(logs[0], packageVersion)
+})
+
+test('package exposes dshk with the dsh-keeper long-form alias', () => {
+  const metadata = JSON.parse(readFileSync('package.json', 'utf8')) as {
+    name: string
+    bin: Record<string, string>
+  }
+  assert.equal(metadata.name, 'dsh-keeper')
+  assert.deepEqual(metadata.bin, {
+    dshk: 'dist/src/cli.js',
+    'dsh-keeper': 'dist/src/cli.js',
+  })
 })
 
 test('--dry-run conflicts with -y', () => {

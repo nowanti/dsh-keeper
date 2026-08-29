@@ -80,7 +80,7 @@ const en = {
   'fallback.notValidated': () => 'not validated',
   'fallback.insufficientEvidence': () => 'insufficient evidence',
   'fallback.conflict': () => 'confirmed conflict',
-  'cli.usage': p => `dshkeeper ${value(p, 'version')}\n\nUsage:\n  dshkeeper upgrade [options]\n  dshkeeper status [options]\n\nCommands:\n  upgrade              Show candidates, then validate, apply, and roll back failed transactions\n  status               Inspect local DSH, profiles, and configuration\n\nOptions:\n  -P, --profile NAME   Inspect one profile only\n  --plugins-only       Keep the current DSH and inspect plugins only\n  --preview            Include prerelease plugin candidates\n  --dry-run            Complete isolation validation without prompting or applying\n  -y, --yes            Skip confirmation; still validate before applying recommended updates\n  --json               Emit a machine-readable receipt\n  --lang LOCALE        Use en or zh-CN (overrides DSHKEEPER_LANG)\n  -v, --verbose        Show held-candidate reasons and phase timings\n  -h, --help           Show help\n  --version            Show version`,
+  'cli.usage': p => `dshk ${value(p, 'version')}\n\nUsage:\n  dshk upgrade [options]\n  dshk status [options]\n\nAlias:\n  dsh-keeper           Same command, using the package name\n\nCommands:\n  upgrade              Show candidates, then validate, apply, and roll back failed transactions\n  status               Inspect local DSH, profiles, and configuration\n\nOptions:\n  -P, --profile NAME   Inspect one profile only\n  --plugins-only       Keep the current DSH and inspect plugins only\n  --preview            Include prerelease plugin candidates\n  --dry-run            Complete isolation validation without prompting or applying\n  -y, --yes            Skip confirmation; still validate before applying recommended updates\n  --json               Emit a machine-readable receipt\n  --lang LOCALE        Use en or zh-CN (overrides DSH_KEEPER_LANG)\n  -v, --verbose        Show held-candidate reasons and phase timings\n  -h, --help           Show help\n  --version            Show version`,
   'cli.unknownCommand': p => `unknown command: ${value(p, 'command')}`,
   'cli.missingProfile': p => `${value(p, 'option')} requires a profile name`,
   'cli.missingLanguage': p => `${value(p, 'option')} requires a locale`,
@@ -233,7 +233,7 @@ const zh = {
   'fallback.notValidated': () => '尚未验证',
   'fallback.insufficientEvidence': () => '证据不足',
   'fallback.conflict': () => '存在确定冲突',
-  'cli.usage': p => `dshkeeper ${value(p, 'version')}\n\n用法:\n  dshkeeper upgrade [选项]\n  dshkeeper status [选项]\n\n命令:\n  upgrade              展示候选，确认后隔离验证、应用并回滚失败事务\n  status               检查本地 DSH、profiles 和配置\n\n选项:\n  -P, --profile NAME   只检查一个 profile\n  --plugins-only       保持当前 DSH，只检查插件\n  --preview            包含 prerelease 插件候选\n  --dry-run            完成隔离验证，但不询问、不应用\n  -y, --yes            跳过确认，仍经隔离验证后自动应用推荐更新\n  --json               输出机器可读 receipt\n  --lang LOCALE        使用 en 或 zh-CN（覆盖 DSHKEEPER_LANG）\n  -v, --verbose        显示保持原因和各阶段用时\n  -h, --help           显示帮助\n  --version            显示版本`,
+  'cli.usage': p => `dshk ${value(p, 'version')}\n\n用法:\n  dshk upgrade [选项]\n  dshk status [选项]\n\n别名:\n  dsh-keeper           与短命令等价的包名命令\n\n命令:\n  upgrade              展示候选，确认后隔离验证、应用并回滚失败事务\n  status               检查本地 DSH、profiles 和配置\n\n选项:\n  -P, --profile NAME   只检查一个 profile\n  --plugins-only       保持当前 DSH，只检查插件\n  --preview            包含 prerelease 插件候选\n  --dry-run            完成隔离验证，但不询问、不应用\n  -y, --yes            跳过确认，仍经隔离验证后自动应用推荐更新\n  --json               输出机器可读 receipt\n  --lang LOCALE        使用 en 或 zh-CN（覆盖 DSH_KEEPER_LANG）\n  -v, --verbose        显示保持原因和各阶段用时\n  -h, --help           显示帮助\n  --version            显示版本`,
   'cli.unknownCommand': p => `未知命令: ${value(p, 'command')}`,
   'cli.missingProfile': p => `${value(p, 'option')} 缺少 profile 名`,
   'cli.missingLanguage': p => `${value(p, 'option')} 缺少语言`,
@@ -352,7 +352,7 @@ export function resolveLocale(options: LocaleOptions = {}): Locale {
   const env = options.env ?? process.env
   const explicit = normalizeLocale(options.explicit)
   if (explicit !== null) return explicit
-  const configured = normalizeLocale(env.DSHKEEPER_LANG)
+  const configured = normalizeLocale(env.DSH_KEEPER_LANG)
   if (configured !== null) return configured
   for (const candidate of [env.LC_ALL, env.LC_MESSAGES, env.LANG]) {
     if (candidate !== undefined && !/^(?:C|POSIX)(?:\.|$)/i.test(candidate)) {

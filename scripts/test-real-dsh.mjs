@@ -5,7 +5,7 @@ import { delimiter, join } from 'node:path'
 import { runCommand } from '../dist/src/adapters/process.js'
 
 const version = process.env.DSH_E2E_VERSION?.trim() || '0.1.1-rc.2'
-const root = mkdtempSync(join(tmpdir(), 'dshkeeper-real-dsh-'))
+const root = mkdtempSync(join(tmpdir(), 'dsh-keeper-real-dsh-'))
 const tool = join(root, 'tool')
 const home = join(root, 'home')
 mkdirSync(tool, { recursive: true })
@@ -46,10 +46,10 @@ try {
   writeFileSync(receiptPath, status.stdout)
   const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'))
   if (receipt.schemaVersion !== 2) throw new Error(`unexpected receipt schema: ${receipt.schemaVersion}`)
-  if (receipt.core?.current !== version) throw new Error(`dshkeeper saw DSH ${receipt.core?.current ?? 'unknown'}`)
+  if (receipt.core?.current !== version) throw new Error(`dsh-keeper saw DSH ${receipt.core?.current ?? 'unknown'}`)
   if (receipt.profiles?.[0]?.config !== 'passed') throw new Error('real DSH --dump-config validation did not pass')
   process.stdout.write(`real DSH ${version} profile E2E passed on ${process.platform}/${process.arch}\n`)
 } finally {
-  if (process.env.DSHKEEPER_KEEP_E2E === '1') process.stdout.write(`fixture retained at ${root}\n`)
+  if (process.env.DSH_KEEPER_KEEP_E2E === '1') process.stdout.write(`fixture retained at ${root}\n`)
   else rmSync(root, { recursive: true, force: true })
 }

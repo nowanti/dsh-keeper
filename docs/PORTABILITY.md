@@ -10,9 +10,9 @@ DSH 官方仓库当前把 Linux、macOS 和 Windows 都纳入工程与发布范�
 
 证据来自上游当前 [`ci.yml`](https://github.com/deepseek-ai/deepseek-harness/blob/master/.github/workflows/ci.yml) 和 [`pnpm-workspace.yaml`](https://github.com/deepseek-ai/deepseek-harness/blob/master/pnpm-workspace.yaml)。
 
-这只能证明 DSH 的平台目标，不能替代 `dshkeeper` 自身的验证。
+这只能证明 DSH 的平台目标，不能替代 `dsh-keeper` 自身的验证。
 
-## dshkeeper 当前支持矩阵
+## dsh-keeper 当前支持矩阵
 
 | 平台 | 证据 | 结论 |
 | --- | --- | --- |
@@ -35,11 +35,11 @@ Windows 采用独立平台 adapter：
 
 - 支持 `en` 与 `zh-CN`；
 - 中文系统默认 `zh-CN`，其他系统默认 `en`；
-- `--lang en|zh-CN` 优先于 `DSHKEEPER_LANG`，二者再优先于系统 locale；
+- `--lang en|zh-CN` 优先于 `DSH_KEEPER_LANG`，二者再优先于系统 locale；
 - CLI 帮助、进度、确认、结论、错误和人工建议使用同一 locale；
 - JSON receipt 不翻译，使用稳定 reason code 与结构化参数；
 - 包名、版本、路径、命令和远端原始诊断保持原样，不作为翻译键。
 
 assessment receipt 已升级到 `schemaVersion: 2`。兼容判断、保持原因、Git 远端状态和 DSH core 判断均使用稳定 `reason.*` code 与参数；CLI 帮助、spinner、确认、结论、错误、升级事务和 runtime 错误统一从同一 catalog 渲染。测试同时覆盖 locale 优先级、双语诊断和语言无关 receipt。
 
-DSH 自身已有客户端 locale 服务和第三方语言注册能力，但 `dshkeeper` 必须在 DSH 无法启动时仍能诊断和恢复，因此不能把自己的 CLI 翻译依赖放进 DSH 运行时。它会使用独立的小型 catalog，同时沿用上游的 `zh`/`en` 双语维护原则。
+DSH 自身已有客户端 locale 服务和第三方语言注册能力，但 `dsh-keeper` 必须在 DSH 无法启动时仍能诊断和恢复，因此不能把自己的 CLI 翻译依赖放进 DSH 运行时。它会使用独立的小型 catalog，同时沿用上游的 `zh`/`en` 双语维护原则。

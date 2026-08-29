@@ -1,11 +1,11 @@
-# dshkeeper 设计
+# dsh-keeper 设计
 
 ## 用户目标
 
 用户不需要管理升级计划。标准交互只有：
 
 ```bash
-dshkeeper upgrade
+dshk upgrade
 ```
 
 系统在内部完成发现、求解、快照、隔离验证、切换和回滚。只有系统无法在不损失能力或扩大权限的前提下做决定时，才要求用户介入。
@@ -111,6 +111,6 @@ src
 1. 在 GitHub 原生 macOS/Linux/Windows runner 上固化当前双语、reason code、`.cmd`、进程生命周期和真实 DSH profile E2E。
 2. 在隔离端口完成 Web API/UI 和 TUI smoke，把 `staged` 提升为关键路径 `verified`。
 3. 增加显式 `rollback` 与进程崩溃后的 journal 自动恢复。
-4. 将 DSH 核心本体纳入同一个版本求解与 generation 事务。
+4. 让 DSH 本体与插件一起安全升级：把 DSH 核心纳入同一个版本求解与 generation 事务。
 5. 用跨平台 reflink 与复用 assessment cache 继续压缩等待时间。
 6. 吸收旧 Bash `dshctl` 的其余服务命令并移除旧入口。

@@ -126,7 +126,7 @@ export class DshRuntimeController implements RuntimeController {
       const isDsh = /(?:^|[\s/\\])dsh(?:\.cmd|\.exe)?(?:\s|$)/i.test(command)
         || /[\\/]@deepseek-ai[\\/]dsh[\\/]/i.test(command)
         || /[\\/]dsh[\\/][^\s"']+\.(?:m?js|cjs)(?:["']?\s|$)/i.test(command)
-      if (!profilePattern.test(command) || !isDsh || /dshkeeper/i.test(command)) continue
+      if (!profilePattern.test(command) || !isDsh || /\b(?:dshk|dsh-keeper)\b/i.test(command)) continue
       const portMatch = /(?:--port(?:=|\s+))(\d+)(?:\s|$)/.exec(command)
       const cwdResult = this.#platform === 'win32' ? null : await this.#runCommand('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], {
         timeoutMs: 5_000, env: this.#env, platform: this.#platform,
@@ -143,10 +143,10 @@ export class DshRuntimeController implements RuntimeController {
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      '$connection = Get-NetTCPConnection -State Listen -LocalPort ([int]$env:DSHKEEPER_TARGET_PORT) -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -ne $connection) { [Console]::Out.Write($connection.OwningProcess) }',
+      '$connection = Get-NetTCPConnection -State Listen -LocalPort ([int]$env:DSH_KEEPER_TARGET_PORT) -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -ne $connection) { [Console]::Out.Write($connection.OwningProcess) }',
     ], {
       timeoutMs: 10_000,
-      env: { ...this.#env, DSHKEEPER_TARGET_PORT: String(port) },
+      env: { ...this.#env, DSH_KEEPER_TARGET_PORT: String(port) },
       platform: this.#platform,
     })
     if (result.code !== 0 || result.timedOut) return null

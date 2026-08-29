@@ -1,10 +1,11 @@
 {
-  "name": "dshkeeper",
+  "name": "dsh-keeper",
   "version": "0.3.0",
   "description": "External lifecycle and compatibility manager for DeepSeek Harness",
   "type": "module",
   "bin": {
-    "dshkeeper": "dist/src/cli.js"
+    "dshk": "dist/src/cli.js",
+    "dsh-keeper": "dist/src/cli.js"
   },
   "files": [
     "dist/src/**/*.js",
@@ -17,11 +18,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nowanti/dshkeeper.git"
+    "url": "git+https://github.com/nowanti/dsh-keeper.git"
   },
-  "homepage": "https://github.com/nowanti/dshkeeper#readme",
+  "homepage": "https://github.com/nowanti/dsh-keeper#readme",
   "bugs": {
-    "url": "https://github.com/nowanti/dshkeeper/issues"
+    "url": "https://github.com/nowanti/dsh-keeper/issues"
   },
   "keywords": [
     "deepseek-harness",

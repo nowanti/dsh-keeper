@@ -7,15 +7,15 @@ import { resolveLocale, translate, translateDiagnostic } from '../src/i18n.js'
 test('explicit locale overrides environment and system locale', () => {
   assert.equal(resolveLocale({
     explicit: 'en-US',
-    env: { DSHKEEPER_LANG: 'zh-CN', LANG: 'zh_CN.UTF-8' },
+    env: { DSH_KEEPER_LANG: 'zh-CN', LANG: 'zh_CN.UTF-8' },
     platform: 'linux',
     intlLocale: 'zh-CN',
   }), 'en')
 })
 
-test('DSHKEEPER_LANG overrides the operating-system locale', () => {
+test('DSH_KEEPER_LANG overrides the operating-system locale', () => {
   assert.equal(resolveLocale({
-    env: { DSHKEEPER_LANG: 'zh-Hans', LANG: 'en_US.UTF-8' },
+    env: { DSH_KEEPER_LANG: 'zh-Hans', LANG: 'en_US.UTF-8' },
     platform: 'linux',
     intlLocale: 'en-US',
   }), 'zh-CN')

@@ -10,7 +10,7 @@ import { diagnostic } from '../src/core/diagnostics.js'
 import { applyUpgrade, discardStage, stageUpgrade, type UpgradePlan } from '../src/upgrade.js'
 
 function temporaryDirectory(): string {
-  const path = join(tmpdir(), `dshkeeper-test-${process.pid}-${Math.random().toString(16).slice(2)}`)
+  const path = join(tmpdir(), `dsh-keeper-test-${process.pid}-${Math.random().toString(16).slice(2)}`)
   mkdirSync(path, { recursive: true })
   return path
 }
@@ -196,7 +196,7 @@ test('failed live validation restores files, node_modules and service', async ()
     const installed = JSON.parse(readFileSync(join(root, 'profiles', 'web', 'node_modules', 'example-plugin', 'package.json'), 'utf8')) as { version: string }
     assert.equal(live.dependencies['example-plugin'], '1.0.0')
     assert.equal(installed.version, '1.0.0')
-    const journal = JSON.parse(readFileSync(join(root, 'dshkeeper', 'transactions', 'apply-rollback', 'transaction.json'), 'utf8')) as { state: string }
+    const journal = JSON.parse(readFileSync(join(root, 'dsh-keeper', 'transactions', 'apply-rollback', 'transaction.json'), 'utf8')) as { state: string }
     assert.equal(journal.state, 'rolled-back')
     assert.equal(existsSync(plan.stagingRoot), false)
   } finally {

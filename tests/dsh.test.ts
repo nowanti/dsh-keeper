@@ -11,7 +11,7 @@ describe('DshAdapter installation inventory', () => {
   let binary = ''
 
   before(async () => {
-    root = await mkdtemp(join(tmpdir(), 'dshkeeper-host-'))
+    root = await mkdtemp(join(tmpdir(), 'dsh-keeper-host-'))
     binary = join(root, 'lib', 'bin.js')
     await mkdir(join(root, 'lib'), { recursive: true })
     await mkdir(join(root, 'node_modules', 'react'), { recursive: true })

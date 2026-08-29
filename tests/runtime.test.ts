@@ -96,7 +96,8 @@ test('discovers DSH processes through the Windows CIM adapter', async () => {
     code: 0,
     stdout: JSON.stringify([
       { pid: 42, command: 'C:\\Tools\\dsh.cmd --profile web --port 3080' },
-      { pid: 43, command: 'C:\\Tools\\dshkeeper.cmd upgrade --profile web' },
+      { pid: 43, command: 'C:\\Tools\\dshk.cmd upgrade --profile web' },
+      { pid: 44, command: 'C:\\Tools\\dsh-keeper.cmd upgrade --profile web' },
     ]),
     stderr: '',
     timedOut: false,
@@ -136,7 +137,7 @@ test('starts, discovers, and stops a detached DSH shim on native Windows', {
   skip: process.platform !== 'win32',
   timeout: 30_000,
 }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'dshkeeper-windows-runtime-'))
+  const root = mkdtempSync(join(tmpdir(), 'dsh-keeper-windows-runtime-'))
   const binDir = join(root, 'dsh')
   mkdirSync(binDir, { recursive: true })
   const fixture = [
