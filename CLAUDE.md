@@ -1,13 +1,13 @@
-# dshctl 项目规范
+# dshkeeper 项目规范
 
 ## 定位
 
-`dshctl` 是 DeepSeek Harness 的外置生命周期工具。它替用户完成版本发现、兼容性判断、隔离验证、升级切换和失败回滚，不是 DSH 插件市场，也不重新实现 pnpm。
+`dshkeeper` 是 DeepSeek Harness 的外置生命周期工具。它替用户完成版本发现、兼容性判断、隔离验证、升级切换和失败回滚，不是 DSH 插件市场，也不重新实现 pnpm。
 
 用户默认只需要执行：
 
 ```bash
-dshctl upgrade
+dshkeeper upgrade
 ```
 
 计划、快照、验证和回滚是内部事务阶段，不得要求普通用户逐步操作。只有权限扩大、来源变化、能力损失或证据不足等无法安全代替用户决定的情况才暂停。
@@ -18,16 +18,24 @@ dshctl upgrade
 - 交互终端默认以 `[Y/n]` 一次确认整笔推荐更新；`--yes` 仅用于显式非交互授权，`--dry-run` 永不修改现有 profile。
 - 写入前必须建立事务记录和可恢复快照。多个 profile 作为一笔事务切换；任一步失败必须恢复已经切换的 profile。
 - 远端不可达只代表证据未知，不得据此卸载、删除或改写现有依赖；可以显示精确的手动移除命令。
-- 不在 DSH 进程内部运行核心引擎。DSH 无法启动时，`dshctl` 仍应能够诊断和恢复。
+- 不在 DSH 进程内部运行核心引擎。DSH 无法启动时，`dshkeeper` 仍应能够诊断和恢复。
 - 复用官方 `dsh`、pnpm 和成熟生态能力；不要实现新的包下载器、lockfile 格式或插件市场。
 
 ## 平台与语言契约
 
 - 目标平台与 DSH 一致：macOS、Linux、Windows。只有在对应原生平台完成构建、测试和进程生命周期验证后，才能宣称支持。
-- 当前 macOS 已完成真实 profile 升级验证；Linux 已在 Node 24 Debian 容器通过测试套件但尚缺真实 DSH profile E2E；Windows 仍缺 `.cmd` 命令启动、进程发现和终止实现，不得标记为兼容。
-- 面向公开用户的目标语言是英文和简体中文。非中文系统默认英文，中文系统默认简体中文，并允许 `--lang` 和 `DSHCTL_LANG` 显式覆盖。
+- macOS、Linux、Windows 的公共支持声明必须由 GitHub Actions 原生 runner 共同门禁；单元测试中的 platform mock 只能证明分支逻辑，不能替代原生 `.cmd`、进程和文件事务测试。
+- 面向公开用户的目标语言是英文和简体中文。非中文系统默认英文，中文系统默认简体中文，并允许 `--lang` 和 `DSHKEEPER_LANG` 显式覆盖。
 - JSON receipt 必须以稳定 reason code 和参数表达语义，不输出依赖当前 locale 的判断文本；人类可读渲染再按 locale 翻译。
 - 在 reason code 与 locale catalog 落地前，不得通过零散条件分支继续扩散新的中文文案。
+
+## 发布与生态契约
+
+- `dshkeeper` 是独立 CLI，不声明 `dsh.bundle`，也不使用只面向插件仓库的 `dsh-plugin` Topic；它必须在 DSH 启动失败时仍可工作。
+- npm 包与 GitHub 仓库同名 `dshkeeper`。安装入口是 `npm install -g dshkeeper`，临时入口是 `npx dshkeeper`。
+- pull request 和 main push 必须在 macOS、Linux、Windows 原生 runner 上完成 typecheck、build、unit/integration tests、CLI 双语 smoke 与 package dry-run；真实 DSH profile E2E 单独门禁。
+- npm 发布只由 `v<package-version>` tag 触发。工作流必须先验证 tag 与 `package.json` 一致、重跑测试并打包，再使用 npm Trusted Publishing/OIDC 和 provenance 发布；仓库不得保存长期 `NPM_TOKEN`。
+- 发布前的外部动作分成两步：本仓库可完整准备工作流和文档；首次创建公开 GitHub 仓库、配置 npm Trusted Publisher、占用包名和提交官方生态入口，需要明确记录执行结果。
 
 ## 用户体验契约
 
@@ -64,12 +72,20 @@ dshctl upgrade
 ## 目录约定
 
 ```text
-dshctl/
+dshkeeper/
 ├── CLAUDE.md
 ├── README.md
+├── .github/
+│   ├── workflows/
+│   └── dependabot.yml
 ├── docs/
 │   ├── DESIGN.md
+│   ├── ECOSYSTEM.md
+│   ├── PORTABILITY.md
+│   ├── RELEASE.md
 │   └── SECURITY.md
+├── scripts/
+│   └── test-real-dsh.mjs
 ├── src/
 │   ├── cli.ts
 │   ├── core/

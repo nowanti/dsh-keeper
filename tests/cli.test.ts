@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { main, parseArgs, type CliDependencies } from '../src/cli.js'
 import type { AssessmentReceipt } from '../src/core/types.js'
 import type { UpgradePlan } from '../src/upgrade.js'
+import { diagnostic } from '../src/core/diagnostics.js'
 
 function candidateReceipt(): AssessmentReceipt {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     mode: 'read-only-upgrade',
     generatedAt: '2026-08-29T00:00:00.000Z',
     dshHome: '/tmp/.dsh',
@@ -16,7 +18,7 @@ function candidateReceipt(): AssessmentReceipt {
       recommended: '0.1.1-rc.2',
       preview: null,
       action: 'current',
-      message: '当前已是推荐版本',
+      reason: diagnostic('reason.dshCurrent'),
     },
     profiles: [{
       name: 'web',
@@ -61,7 +63,6 @@ function candidateReceipt(): AssessmentReceipt {
       unknown: 0,
       blocked: 0,
     },
-    notices: [],
   }
 }
 
@@ -69,11 +70,11 @@ function stagedPlan(): UpgradePlan {
   return {
     transactionId: 'test-upgrade',
     dshHome: '/tmp/.dsh',
-    stagingRoot: '/tmp/.dsh/dshctl/staging/test-upgrade',
+    stagingRoot: '/tmp/.dsh/dshkeeper/staging/test-upgrade',
     profiles: [{
       name: 'web',
       livePath: '/tmp/.dsh/profiles/web',
-      stagedPath: '/tmp/.dsh/dshctl/staging/test-upgrade/profiles/web',
+      stagedPath: '/tmp/.dsh/dshkeeper/staging/test-upgrade/profiles/web',
       changes: [{ profile: 'web', package: 'upgrade-me', from: '1.0.0', to: '2.0.0', integrity: 'sha512-test' }],
     }],
     changes: [{ profile: 'web', package: 'upgrade-me', from: '1.0.0', to: '2.0.0', integrity: 'sha512-test' }],
@@ -105,6 +106,7 @@ function flowDependencies(events: string[], logs: string[]): CliDependencies {
       clock += 1_000
       return value
     },
+    locale: 'zh-CN',
   }
 }
 
@@ -119,8 +121,26 @@ test('-y and --yes both skip upgrade confirmation', () => {
   }
 })
 
+test('CLI version matches package metadata', async () => {
+  const logs: string[] = []
+  const packageVersion = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version
+  assert.equal(await main(['--version'], { log: message => logs.push(message), locale: 'en' }), 0)
+  assert.equal(logs[0], packageVersion)
+})
+
 test('--dry-run conflicts with -y', () => {
-  assert.throws(() => parseArgs(['upgrade', '--dry-run', '-y']), /不能与/)
+  assert.throws(() => parseArgs(['upgrade', '--dry-run', '-y'], 'zh-CN'), /不能与/)
+})
+
+test('--lang accepts both supported locales before or after the command', () => {
+  const english = parseArgs(['--lang', 'en', 'status'], 'zh-CN')
+  const chinese = parseArgs(['status', '--lang=zh-CN'], 'en')
+  assert.notEqual(typeof english, 'string')
+  assert.notEqual(typeof chinese, 'string')
+  if (typeof english !== 'string' && typeof chinese !== 'string') {
+    assert.equal(english.locale, 'en')
+    assert.equal(chinese.locale, 'zh-CN')
+  }
 })
 
 test('interactive cancellation happens before isolation staging', async () => {
@@ -202,4 +222,28 @@ test('--json reports phase timings in milliseconds without applying', async () =
   assert.deepEqual(events, ['assess', 'stage', 'discard'])
   const output = JSON.parse(logs.at(-1) ?? '{}') as { timings?: Record<string, number> }
   assert.deepEqual(output.timings, { discoveryMs: 1_000, isolationMs: 1_000 })
+})
+
+test('English locale covers candidates and cancellation, not only help', async () => {
+  const events: string[] = []
+  const logs: string[] = []
+  const dependencies = flowDependencies(events, logs)
+  dependencies.locale = 'en'
+  dependencies.confirm = async () => false
+
+  assert.equal(await main(['upgrade'], dependencies), 0)
+  assert.match(logs[0] ?? '', /Found 1 plugin update/)
+  assert.match(logs.at(-1) ?? '', /Cancelled; no candidate packages were downloaded/)
+  assert.doesNotMatch(logs.join('\n'), /发现|已取消|隔离验证/)
+})
+
+test('JSON receipt keeps reason codes independent of locale', async () => {
+  const logs: string[] = []
+  const dependencies = flowDependencies([], logs)
+  dependencies.locale = 'en'
+
+  assert.equal(await main(['status', '--json'], dependencies), 0)
+  const output = JSON.parse(logs.at(-1) ?? '{}') as AssessmentReceipt
+  assert.equal(output.schemaVersion, 2)
+  assert.equal(output.core.reason.code, 'reason.dshCurrent')
 })

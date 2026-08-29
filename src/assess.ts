@@ -12,6 +12,7 @@ import {
   type ProfileInventory,
 } from './adapters/profiles.js'
 import { evaluateCompatibility } from './core/compatibility.js'
+import { diagnostic, type Diagnostic } from './core/diagnostics.js'
 import { newerCandidateVersions } from './core/selection.js'
 import type {
   AssessmentReceipt,
@@ -24,6 +25,7 @@ import type {
   PackageManifest,
   ProfileAssessment,
 } from './core/types.js'
+import { translate, type Locale } from './i18n.js'
 
 const MAX_VERSION_CANDIDATES = 30
 
@@ -33,6 +35,7 @@ export interface AssessmentOptions {
   pluginsOnly: boolean
   preview: boolean
   env?: NodeJS.ProcessEnv
+  locale?: Locale
   onProgress?: (message: string) => void
 }
 interface Adapters {
@@ -61,19 +64,19 @@ function withCandidateSafety(
   )
   const addedScripts = base.installScripts.filter(name => !currentScripts.has(name))
   if (addedScripts.length > 0) {
-    warnings.push(`新增 lifecycle script: ${addedScripts.join(', ')}`)
+    warnings.push(diagnostic('reason.addedLifecycleScript', { scripts: addedScripts.join(', ') }))
     if (state === 'declared') state = 'unknown'
   }
   if (!sameJson(currentManifest?.dsh?.permissions, candidateManifest.dsh?.permissions)) {
-    warnings.push('DSH permissions 声明发生变化')
+    warnings.push(diagnostic('reason.permissionsChanged'))
     if (state === 'declared') state = 'unknown'
   }
   if (hasPatch) {
-    warnings.push('当前版本带本地 patch，候选版本尚未验证 patch 可应用')
+    warnings.push(diagnostic('reason.localPatch'))
     if (state === 'declared') state = 'unknown'
   }
   if (candidateManifest.dist?.integrity === undefined) {
-    warnings.push('npm 候选缺少 integrity')
+    warnings.push(diagnostic('reason.missingIntegrity'))
     if (state === 'declared') state = 'unknown'
   }
   return { ...base, state, warnings }
@@ -127,7 +130,7 @@ async function assessNpmDependency(
   hostVersions: ReadonlyMap<string, string>,
 ): Promise<DependencyAssessment> {
   const current = currentDependency(inventory, name, requested)
-  const messages: string[] = []
+  const messages: Diagnostic[] = []
   if (current.installedVersion === null) {
     return {
       ...current,
@@ -137,7 +140,7 @@ async function assessNpmDependency(
       git: null,
       checkedCandidates: 0,
       status: 'blocked',
-      messages: ['依赖写在 profile 中，但 node_modules 没有可读的已安装 manifest'],
+      messages: [diagnostic('reason.installedManifestMissing')],
     }
   }
 
@@ -214,7 +217,7 @@ async function assessNpmDependency(
     }
 
     if (recommended !== null) {
-      messages.push(`发现声明兼容候选 ${recommended.version}；尚需隔离安装和运行验证`)
+      messages.push(diagnostic('reason.compatibleCandidate', { version: recommended.version }))
       return {
         ...current,
         latestVersion,
@@ -230,11 +233,11 @@ async function assessNpmDependency(
     const latestState = latestEvaluation?.state ?? 'unknown'
     messages.push(
       latestState === 'blocked'
-        ? '较新版本与当前 DSH/Node/peer contract 冲突，保持当前版本'
-        : '较新版本缺少足够兼容证据，保持当前版本',
+        ? diagnostic('reason.newerBlocked')
+        : diagnostic('reason.newerUnknown'),
     )
     if (candidates.length > MAX_VERSION_CANDIDATES) {
-      messages.push(`为限制 registry 请求，只检查了前 ${MAX_VERSION_CANDIDATES} 个候选`)
+      messages.push(diagnostic('reason.candidateLimit', { limit: MAX_VERSION_CANDIDATES }))
     }
     return {
       ...current,
@@ -247,7 +250,7 @@ async function assessNpmDependency(
       messages,
     }
   } catch {
-    messages.push('无法取得完整 npm 候选元数据，未做升级建议')
+    messages.push(diagnostic('reason.npmMetadataUnavailable'))
     return {
       ...current,
       latestVersion: outdated?.latest ?? null,
@@ -279,7 +282,7 @@ async function assessGitDependency(
       git: null,
       checkedCandidates: 0,
       status: 'blocked',
-      messages: ['GitHub dependency 格式无法安全解析'],
+      messages: [diagnostic('reason.githubFormatInvalid')],
     }
   }
   const repository = `${reference.owner}/${reference.repository}`
@@ -295,11 +298,11 @@ async function assessGitDependency(
         headCommit: null,
         exact: false,
         updateAvailable: false,
-        error: '依赖没有固定到完整 commit',
+        error: diagnostic('reason.githubNotPinned'),
       },
       checkedCandidates: 0,
       status: 'blocked',
-      messages: ['GitHub dependency 没有固定到完整 commit，拒绝自动更新'],
+      messages: [diagnostic('reason.githubNotPinned')],
     }
   }
   if (options.command === 'status') {
@@ -318,18 +321,18 @@ async function assessGitDependency(
       },
       checkedCandidates: 0,
       status: current.installedVersion === null ? 'blocked' : 'current',
-      messages: current.installedVersion === null ? ['固定 Git 依赖没有已安装 manifest'] : [],
+      messages: current.installedVersion === null ? [diagnostic('reason.gitInstalledManifestMissing')] : [],
     }
   }
 
   const headCommit = await adapters.git.head(reference)
   const currentCommit = reference.ref?.toLowerCase() ?? null
   const updateAvailable = headCommit !== null && currentCommit !== headCommit
-  const error = headCommit === null ? '无法读取远端 HEAD；仓库可能不可达或已删除' : null
+  const error = headCommit === null ? diagnostic('reason.gitRemoteUnavailable') : null
   const messages = error !== null
     ? [error]
     : updateAvailable
-      ? ['远端 HEAD 已变化，但新 commit 未经过 manifest 和隔离运行验证，保持当前 commit']
+      ? [diagnostic('reason.gitHeadChanged')]
       : []
   return {
     ...current,
@@ -364,7 +367,7 @@ async function assessOtherDependency(
     git: null,
     checkedCandidates: 0,
     status: current.source === 'linked' ? 'unknown' : 'blocked',
-    messages: [current.source === 'linked' ? '本地依赖不参与 registry 更新' : '无法识别依赖来源'],
+    messages: [diagnostic(current.source === 'linked' ? 'reason.linkedNotChecked' : 'reason.sourceUnknown')],
   }
 }
 
@@ -375,13 +378,14 @@ async function assessProfile(
   adapters: Adapters,
   hostVersions: ReadonlyMap<string, string>,
 ): Promise<ProfileAssessment> {
-  const warnings: string[] = []
-  options.onProgress?.(`正在检查 ${inventory.name} 的配置与更新索引`)
+  const warnings: Diagnostic[] = []
+  const locale = options.locale ?? 'en'
+  options.onProgress?.(translate(locale, 'progress.profileIndex', { profile: inventory.name }))
   const [configProbe, outdated] = await Promise.all([
     adapters.dsh.checkConfig(inventory.name),
     options.command === 'upgrade'
       ? adapters.pnpm.outdated(inventory.path).catch(() => {
-          warnings.push('pnpm outdated 失败；npm 更新结果不完整')
+          warnings.push(diagnostic('reason.pnpmOutdatedFailed'))
           return {} as Record<string, OutdatedEntry>
         })
       : Promise.resolve({} as Record<string, OutdatedEntry>),
@@ -389,7 +393,7 @@ async function assessProfile(
 
   const entries = [...inventory.dependencies.entries()]
   const dependencies = await mapLimit(entries, 6, async ([name, requested]) => {
-    options.onProgress?.(`正在检查 ${inventory.name}: ${name}`)
+    options.onProgress?.(translate(locale, 'progress.dependency', { profile: inventory.name, name }))
     const source = dependencySource(requested)
     if (source === 'npm') {
       return assessNpmDependency(inventory, name, requested, outdated[name], dshVersion, options, adapters, hostVersions)
@@ -415,19 +419,19 @@ async function assessCore(
   pnpm: PnpmAdapter,
 ): Promise<CoreAssessment> {
   if (current === null) {
-    return { current: null, recommended: null, preview: null, action: 'unknown', message: '无法读取 DSH 版本' }
+    return { current: null, recommended: null, preview: null, action: 'unknown', reason: diagnostic('reason.dshVersionUnavailable') }
   }
   if (options.command === 'status') {
-    return { current, recommended: null, preview: null, action: 'current', message: 'status 不查询远端版本' }
+    return { current, recommended: null, preview: null, action: 'current', reason: diagnostic('reason.statusLocalOnly') }
   }
   if (options.pluginsOnly) {
-    return { current, recommended: current, preview: null, action: 'current', message: '已按 --plugins-only 固定 DSH' }
+    return { current, recommended: current, preview: null, action: 'current', reason: diagnostic('reason.pluginsOnly') }
   }
   try {
-    options.onProgress?.('正在检查 DSH 推荐版本')
+    options.onProgress?.(translate(options.locale ?? 'en', 'progress.core'))
     const tags = await pnpm.coreTags()
     if (tags.latest === null) {
-      return { current, recommended: null, preview: tags.next, action: 'unknown', message: 'npm 没有可用的 DSH latest tag' }
+      return { current, recommended: null, preview: tags.next, action: 'unknown', reason: diagnostic('reason.dshLatestUnavailable') }
     }
     if (valid(current) !== null && valid(tags.latest) !== null && gt(tags.latest, current)) {
       return {
@@ -435,7 +439,7 @@ async function assessCore(
         recommended: tags.latest,
         preview: tags.next,
         action: 'hold',
-        message: '发现较新的推荐 DSH；DSH 核心切换尚未纳入本次插件事务，因此保持当前版本',
+        reason: diagnostic('reason.dshUpgradeUnsupported'),
       }
     }
     return {
@@ -443,10 +447,10 @@ async function assessCore(
       recommended: tags.latest,
       preview: tags.next,
       action: 'current',
-      message: tags.latest === current ? '当前已是 npm 推荐版本' : '推荐通道没有可证明的向前升级',
+      reason: diagnostic(tags.latest === current ? 'reason.dshCurrent' : 'reason.dshNoForwardUpdate'),
     }
   } catch {
-    return { current, recommended: null, preview: null, action: 'unknown', message: '无法读取 DSH npm 推荐通道' }
+    return { current, recommended: null, preview: null, action: 'unknown', reason: diagnostic('reason.dshChannelUnavailable') }
   }
 }
 
@@ -464,7 +468,8 @@ function summarize(profiles: readonly ProfileAssessment[]): AssessmentSummary {
 }
 
 export async function assessEnvironment(options: AssessmentOptions): Promise<AssessmentReceipt> {
-  options.onProgress?.('正在读取 DSH 与 profiles')
+  const locale = options.locale ?? 'en'
+  options.onProgress?.(translate(locale, 'progress.readEnvironment'))
   const env = options.env ?? process.env
   const dshHome = dshHomeFromEnvironment(env)
   const allProfiles = discoverProfiles(dshHome)
@@ -472,16 +477,18 @@ export async function assessEnvironment(options: AssessmentOptions): Promise<Ass
     ? allProfiles
     : allProfiles.filter(profile => profile.name === options.profile)
   if (inventories.length === 0) {
-    throw new Error(options.profile === undefined ? `没有在 ${dshHome} 发现 DSH profile` : `找不到 profile: ${options.profile}`)
+    throw new Error(options.profile === undefined
+      ? translate(locale, 'error.noProfiles', { home: dshHome })
+      : translate(locale, 'error.profileNotFound', { profile: options.profile }))
   }
 
   const adapters: Adapters = {
     dsh: new DshAdapter(env),
-    pnpm: new PnpmAdapter(env),
+    pnpm: new PnpmAdapter(env, locale),
     git: new GitAdapter(env),
   }
   const currentDsh = await adapters.dsh.version()
-  options.onProgress?.('正在读取 DSH 宿主依赖')
+  options.onProgress?.(translate(locale, 'progress.readHost'))
   const hostVersions = adapters.dsh.installation()?.versions ?? new Map<string, string>()
   const dshVersionForEvaluation = currentDsh ?? '0.0.0-unknown'
   const [core, profiles] = await Promise.all([
@@ -489,15 +496,14 @@ export async function assessEnvironment(options: AssessmentOptions): Promise<Ass
     mapLimit(inventories, 2, inventory => assessProfile(inventory, dshVersionForEvaluation, options, adapters, hostVersions)),
   ])
 
-  options.onProgress?.('正在整理检查结论')
+  options.onProgress?.(translate(locale, 'progress.summarize'))
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     mode: options.command === 'upgrade' ? 'read-only-upgrade' : 'status',
     generatedAt: new Date().toISOString(),
     dshHome,
     core,
     profiles,
     summary: summarize(profiles),
-    notices: [],
   }
 }

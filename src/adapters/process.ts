@@ -6,12 +6,48 @@ export interface CommandOptions {
   timeoutMs?: number
   maxOutputBytes?: number
   discardOutput?: boolean
+  platform?: NodeJS.Platform
 }
 export interface CommandResult {
   code: number | null
   stdout: string
   stderr: string
   timedOut: boolean
+}
+
+interface CommandInvocation {
+  command: string
+  args: string[]
+  env: NodeJS.ProcessEnv
+}
+
+const WINDOWS_RUNNER = [
+  "$payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:DSHKEEPER_COMMAND_PAYLOAD)) | ConvertFrom-Json",
+  'Remove-Item Env:\\DSHKEEPER_COMMAND_PAYLOAD',
+  '& $payload.command @($payload.args)',
+  'exit $LASTEXITCODE',
+].join('; ')
+
+/**
+ * Windows package-manager shims are commonly .cmd files and cannot be spawned
+ * directly by Node. Transfer the command and arguments as JSON in the child
+ * environment so no user-controlled value is interpolated into shell source.
+ */
+export function commandInvocation(
+  command: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): CommandInvocation {
+  if (platform !== 'win32' || /\.(?:exe|com)$/i.test(command)) {
+    return { command, args: [...args], env }
+  }
+  const payload = Buffer.from(JSON.stringify({ command, args }), 'utf8').toString('base64')
+  return {
+    command: 'powershell.exe',
+    args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_RUNNER],
+    env: { ...env, DSHKEEPER_COMMAND_PAYLOAD: payload },
+  }
 }
 
 export async function runCommand(
@@ -21,12 +57,19 @@ export async function runCommand(
 ): Promise<CommandResult> {
   const timeoutMs = options.timeoutMs ?? 20_000
   const maxOutputBytes = options.maxOutputBytes ?? 10 * 1024 * 1024
+  const invocation = commandInvocation(
+    command,
+    args,
+    options.env ?? process.env,
+    options.platform ?? process.platform,
+  )
 
   return new Promise((resolve, reject) => {
-    const child = spawn(command, [...args], {
+    const child = spawn(invocation.command, invocation.args, {
       cwd: options.cwd,
-      env: options.env ?? process.env,
+      env: invocation.env,
       shell: false,
+      windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     const stdout: Buffer[] = []

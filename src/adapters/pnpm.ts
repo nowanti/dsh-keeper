@@ -1,4 +1,5 @@
 import type { PackageManifest } from '../core/types.js'
+import { translate, type Locale } from '../i18n.js'
 import { isPackageName } from './profiles.js'
 import { runCommand } from './process.js'
 
@@ -35,10 +36,12 @@ export class PnpmAdapter {
   readonly #versionCache = new Map<string, Promise<string[]>>()
   readonly #manifestCache = new Map<string, Promise<PackageManifest>>()
   readonly #env: NodeJS.ProcessEnv
+  readonly #locale: Locale
 
-  constructor(env: NodeJS.ProcessEnv = process.env) {
+  constructor(env: NodeJS.ProcessEnv = process.env, locale: Locale = 'en') {
     this.binary = env.PNPM_BIN?.trim() || 'pnpm'
     this.#env = { ...env }
+    this.#locale = locale
   }
 
   async outdated(profileDir: string): Promise<Record<string, OutdatedEntry>> {
@@ -66,9 +69,9 @@ export class PnpmAdapter {
       env: this.#env,
     })
     if (result.code !== 0 || result.timedOut) {
-      if (result.timedOut) throw new Error('pnpm store add 超时')
+      if (result.timedOut) throw new Error(translate(this.#locale, 'error.pnpmStoreTimeout'))
       const detail = safeFailureSummary(result.stderr || result.stdout)
-      throw new Error(detail === '' ? 'pnpm store add 失败' : `pnpm store add 失败：${detail}`)
+      throw new Error(translate(this.#locale, 'error.pnpmStoreFailed', { detail }))
     }
   }
 
@@ -81,9 +84,9 @@ export class PnpmAdapter {
       env: this.#env,
     })
     if (result.code !== 0 || result.timedOut) {
-      if (result.timedOut) throw new Error('pnpm install 超时')
+      if (result.timedOut) throw new Error(translate(this.#locale, 'error.pnpmInstallTimeout'))
       const detail = safeFailureSummary(result.stderr || result.stdout)
-      throw new Error(detail === '' ? 'pnpm install 失败' : `pnpm install 失败：${detail}`)
+      throw new Error(translate(this.#locale, 'error.pnpmInstallFailed', { detail }))
     }
   }
 

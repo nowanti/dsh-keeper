@@ -1,23 +1,54 @@
 {
-  "name": "dshctl",
-  "version": "0.2.3",
-  "private": true,
+  "name": "dshkeeper",
+  "version": "0.3.0",
   "description": "External lifecycle and compatibility manager for DeepSeek Harness",
   "type": "module",
   "bin": {
-    "dshctl": "dist/src/cli.js"
+    "dshkeeper": "dist/src/cli.js"
   },
+  "files": [
+    "dist/src/**/*.js",
+    "dist/src/**/*.d.ts",
+    "dist/src/**/*.js.map",
+    "docs/**/*.md",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nowanti/dshkeeper.git"
+  },
+  "homepage": "https://github.com/nowanti/dshkeeper#readme",
+  "bugs": {
+    "url": "https://github.com/nowanti/dshkeeper/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin-manager",
+    "compatibility",
+    "upgrade",
+    "cli"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm build && node --test dist/tests/*.test.js",
+    "test:real-dsh": "pnpm build && node scripts/test-real-dsh.mjs",
     "check": "pnpm typecheck && pnpm test",
-    "dev": "node --enable-source-maps dist/src/cli.js"
+    "dev": "node --enable-source-maps dist/src/cli.js",
+    "prepack": "pnpm build",
+    "prepublishOnly": "pnpm check"
   },
   "engines": {
     "node": ">=24.0.0"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "packageManager": "pnpm@10.34.1",
   "dependencies": {
     "semver": "^7.8.5"

@@ -1,3 +1,5 @@
+import type { Diagnostic } from './diagnostics.js'
+
 export type CompatibilityState = 'declared' | 'unknown' | 'blocked'
 
 export type DependencySource = 'npm' | 'github' | 'linked' | 'unknown'
@@ -27,8 +29,8 @@ export interface CompatibilityEvaluation {
   dshRange: string | null
   nodeRange: string | null
   hostContract: 'dsh-engine' | 'dsh-peer' | null
-  blockers: string[]
-  warnings: string[]
+  blockers: Diagnostic[]
+  warnings: Diagnostic[]
   installScripts: string[]
 }
 
@@ -50,7 +52,7 @@ export interface GitCandidate {
   headCommit: string | null
   exact: boolean
   updateAvailable: boolean
-  error: string | null
+  error: Diagnostic | null
 }
 
 export interface DependencyAssessment {
@@ -66,7 +68,7 @@ export interface DependencyAssessment {
   git: GitCandidate | null
   checkedCandidates: number
   status: 'current' | 'upgrade' | 'hold' | 'unknown' | 'blocked'
-  messages: string[]
+  messages: Diagnostic[]
 }
 
 export interface ProfileAssessment {
@@ -76,7 +78,7 @@ export interface ProfileAssessment {
   dependencyCount: number
   bundleCount: number
   dependencies: DependencyAssessment[]
-  warnings: string[]
+  warnings: Diagnostic[]
 }
 
 export interface CoreAssessment {
@@ -84,7 +86,7 @@ export interface CoreAssessment {
   recommended: string | null
   preview: string | null
   action: 'current' | 'hold' | 'unknown'
-  message: string
+  reason: Diagnostic
 }
 
 export interface AssessmentSummary {
@@ -97,14 +99,13 @@ export interface AssessmentSummary {
 }
 
 export interface AssessmentReceipt {
-  schemaVersion: 1
+  schemaVersion: 2
   mode: 'status' | 'read-only-upgrade'
   generatedAt: string
   dshHome: string
   core: CoreAssessment
   profiles: ProfileAssessment[]
   summary: AssessmentSummary
-  notices: string[]
 }
 
 export interface CompatibilityHost {

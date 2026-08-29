@@ -6,10 +6,11 @@ import test from 'node:test'
 
 import type { RuntimeController, RuntimeSpec } from '../src/adapters/runtime.js'
 import type { AssessmentReceipt } from '../src/core/types.js'
+import { diagnostic } from '../src/core/diagnostics.js'
 import { applyUpgrade, discardStage, stageUpgrade, type UpgradePlan } from '../src/upgrade.js'
 
 function temporaryDirectory(): string {
-  const path = join(tmpdir(), `dshctl-test-${process.pid}-${Math.random().toString(16).slice(2)}`)
+  const path = join(tmpdir(), `dshkeeper-test-${process.pid}-${Math.random().toString(16).slice(2)}`)
   mkdirSync(path, { recursive: true })
   return path
 }
@@ -39,11 +40,11 @@ function fixtureReceipt(root: string): AssessmentReceipt {
   writeFileSync(join(profilePath, '.credentials.yaml'), 'secret: must-not-copy\n')
   writeInstalled(profilePath, 'example-plugin', '1.0.0')
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     mode: 'read-only-upgrade',
     generatedAt: new Date().toISOString(),
     dshHome: root,
-    core: { current: '0.1.0', recommended: '0.1.0', preview: null, action: 'current', message: '' },
+    core: { current: '0.1.0', recommended: '0.1.0', preview: null, action: 'current', reason: diagnostic('reason.dshCurrent') },
     profiles: [{
       name: 'web',
       path: profilePath,
@@ -62,7 +63,6 @@ function fixtureReceipt(root: string): AssessmentReceipt {
       }],
     }],
     summary: { profiles: 1, dependencies: 1, recommendedUpdates: 1, heldUpdates: 0, unknown: 0, blocked: 0 },
-    notices: [],
   }
 }
 
@@ -126,8 +126,8 @@ test('staging preserves an unreachable immutable Git dependency without changing
     profile.dependencies.push({
       name: 'missing-git', requested, installedVersion: '0.1.0', source: 'github', activeBundle: true,
       patch: null, latestVersion: null, recommended: null, latestEvaluation: null,
-      git: { repository: 'owner/missing-git', currentCommit: '0123456789abcdef0123456789abcdef01234567', headCommit: null, exact: true, updateAvailable: false, error: 'unreachable' },
-      checkedCandidates: 0, status: 'unknown', messages: ['unreachable'],
+      git: { repository: 'owner/missing-git', currentCommit: '0123456789abcdef0123456789abcdef01234567', headCommit: null, exact: true, updateAvailable: false, error: diagnostic('reason.gitRemoteUnavailable') },
+      checkedCandidates: 0, status: 'unknown', messages: [diagnostic('reason.gitRemoteUnavailable')],
     })
     profile.dependencyCount = 2
     receipt.summary.dependencies = 2
@@ -188,7 +188,7 @@ test('failed live validation restores files, node_modules and service', async ()
     const plan = await stagedFixture(root, 'apply-rollback')
     const runtime = new FakeRuntime([{ profile: 'web', pid: 10, port: 3080, cwd: root }])
     await assert.rejects(
-      applyUpgrade(plan, { runtime, checkProfile: async () => false }),
+      applyUpgrade(plan, { runtime, checkProfile: async () => false, locale: 'zh-CN' }),
       /已自动恢复原版本/,
     )
     assert.deepEqual(runtime.events, ['stop:web', 'start:web'])
@@ -196,7 +196,7 @@ test('failed live validation restores files, node_modules and service', async ()
     const installed = JSON.parse(readFileSync(join(root, 'profiles', 'web', 'node_modules', 'example-plugin', 'package.json'), 'utf8')) as { version: string }
     assert.equal(live.dependencies['example-plugin'], '1.0.0')
     assert.equal(installed.version, '1.0.0')
-    const journal = JSON.parse(readFileSync(join(root, 'dshctl', 'transactions', 'apply-rollback', 'transaction.json'), 'utf8')) as { state: string }
+    const journal = JSON.parse(readFileSync(join(root, 'dshkeeper', 'transactions', 'apply-rollback', 'transaction.json'), 'utf8')) as { state: string }
     assert.equal(journal.state, 'rolled-back')
     assert.equal(existsSync(plan.stagingRoot), false)
   } finally {

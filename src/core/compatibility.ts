@@ -1,5 +1,6 @@
 import { satisfies, validRange } from 'semver'
 
+import { diagnostic, type Diagnostic } from './diagnostics.js'
 import type {
   CompatibilityEvaluation,
   CompatibilityHost,
@@ -23,8 +24,8 @@ export function evaluateCompatibility(
   manifest: PackageManifest,
   host: CompatibilityHost,
 ): CompatibilityEvaluation {
-  const blockers: string[] = []
-  const warnings: string[] = []
+  const blockers: Diagnostic[] = []
+  const warnings: Diagnostic[] = []
   const dshRange = manifest.dsh?.engines?.dsh?.trim() || null
   const nodeRange = manifest.engines?.node?.trim() || null
   let hostContract: CompatibilityEvaluation['hostContract'] = null
@@ -32,27 +33,27 @@ export function evaluateCompatibility(
   if (dshRange !== null) {
     const result = matches(host.dshVersion, dshRange)
     if (result === true) hostContract = 'dsh-engine'
-    else if (result === false) blockers.push(`需要 DSH ${dshRange}，当前是 ${host.dshVersion}`)
-    else warnings.push(`无法解析 DSH 兼容范围 ${dshRange}`)
+    else if (result === false) blockers.push(diagnostic('reason.dshMismatch', { required: dshRange, current: host.dshVersion }))
+    else warnings.push(diagnostic('reason.invalidDshRange', { range: dshRange }))
   }
 
   if (nodeRange !== null) {
     const result = matches(host.nodeVersion, nodeRange)
-    if (result === false) blockers.push(`需要 Node ${nodeRange}，当前是 ${host.nodeVersion}`)
-    else if (result === null) warnings.push(`无法解析 Node 兼容范围 ${nodeRange}`)
+    if (result === false) blockers.push(diagnostic('reason.nodeMismatch', { required: nodeRange, current: host.nodeVersion }))
+    else if (result === null) warnings.push(diagnostic('reason.invalidNodeRange', { range: nodeRange }))
   }
 
   for (const [peer, range] of Object.entries(manifest.peerDependencies ?? {})) {
     const installed = host.installedVersions.get(peer)
     const optional = manifest.peerDependenciesMeta?.[peer]?.optional === true
     if (installed === undefined) {
-      if (!optional) warnings.push(`当前解析层未找到 peer ${peer}@${range}；交给隔离安装验证`)
+      if (!optional) warnings.push(diagnostic('reason.peerMissing', { peer, range }))
       continue
     }
     const result = matches(installed, range)
-    if (result === false && optional) warnings.push(`可选 peer ${peer} 期望 ${range}，当前是 ${installed}`)
-    else if (result === false) blockers.push(`peer ${peer} 需要 ${range}，当前是 ${installed}`)
-    else if (result === null) warnings.push(`无法解析 peer ${peer} 的范围 ${range}`)
+    if (result === false && optional) warnings.push(diagnostic('reason.optionalPeerMismatch', { peer, required: range, current: installed }))
+    else if (result === false) blockers.push(diagnostic('reason.peerMismatch', { peer, required: range, current: installed }))
+    else if (result === null) warnings.push(diagnostic('reason.invalidPeerRange', { peer, range }))
     else if (isDshHostPeer(peer) && hostContract === null) hostContract = 'dsh-peer'
   }
 
@@ -61,7 +62,7 @@ export function evaluateCompatibility(
     return typeof value === 'string' && value.trim() !== ''
   })
   if (installScripts.length > 0) {
-    warnings.push(`包含 lifecycle script: ${installScripts.join(', ')}`)
+    warnings.push(diagnostic('reason.lifecycleScript', { scripts: installScripts.join(', ') }))
   }
 
   let state: CompatibilityEvaluation['state']
@@ -69,7 +70,7 @@ export function evaluateCompatibility(
   else if (hostContract !== null) state = 'declared'
   else {
     state = 'unknown'
-    warnings.push('插件没有声明可判断的 DSH host contract')
+    warnings.push(diagnostic('reason.noHostContract'))
   }
 
   return {

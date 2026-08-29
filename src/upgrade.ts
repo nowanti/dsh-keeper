@@ -20,6 +20,7 @@ import { DshRuntimeController, type RuntimeController, type RuntimeSpec } from '
 import { runCommand } from './adapters/process.js'
 import { readInstalledManifest } from './adapters/profiles.js'
 import type { AssessmentReceipt } from './core/types.js'
+import { translate, type Locale } from './i18n.js'
 
 const PROFILE_COPY_FILES = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'cordis.yml', 'cordis.patch.yml'] as const
 const PROMOTED_FILES = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'] as const
@@ -53,6 +54,7 @@ export interface StageOptions {
   installProfile?: (profilePath: string) => Promise<void>
   checkProfile?: (stagingHome: string, profile: string) => Promise<boolean>
   transactionId?: string
+  locale?: Locale
 }
 
 export interface ApplyResult {
@@ -66,6 +68,7 @@ export interface ApplyOptions {
   onProgress?: (message: string) => void
   runtime?: RuntimeController
   checkProfile?: (dshHome: string, profile: string) => Promise<boolean>
+  locale?: Locale
 }
 
 interface ProfileJournal {
@@ -103,16 +106,16 @@ function ensurePrivateDirectory(path: string): void {
   mkdirSync(path, { recursive: true, mode: 0o700 })
 }
 
-function safeCopyTree(source: string, target: string): void {
+function safeCopyTree(source: string, target: string, locale: Locale): void {
   const stat = lstatSync(source)
-  if (stat.isSymbolicLink()) throw new Error(`隔离输入不允许符号链接: ${basename(source)}`)
+  if (stat.isSymbolicLink()) throw new Error(translate(locale, 'error.symlinkInput', { name: basename(source) }))
   if (stat.isFile()) {
     copyFileSync(source, target)
     return
   }
-  if (!stat.isDirectory()) throw new Error(`隔离输入类型不受支持: ${basename(source)}`)
+  if (!stat.isDirectory()) throw new Error(translate(locale, 'error.unsupportedInput', { name: basename(source) }))
   ensurePrivateDirectory(target)
-  for (const entry of readdirSync(source)) safeCopyTree(join(source, entry), join(target, entry))
+  for (const entry of readdirSync(source)) safeCopyTree(join(source, entry), join(target, entry), locale)
 }
 
 function writeJsonAtomic(path: string, value: unknown): void {
@@ -121,10 +124,10 @@ function writeJsonAtomic(path: string, value: unknown): void {
   renameSync(temporary, path)
 }
 
-function collectChanges(receipt: AssessmentReceipt): UpgradeChange[] {
+function collectChanges(receipt: AssessmentReceipt, locale: Locale): UpgradeChange[] {
   return receipt.profiles.flatMap(profile => profile.dependencies.flatMap(dependency => {
     if (dependency.status !== 'upgrade' || dependency.recommended === null || dependency.installedVersion === null) return []
-    if (dependency.recommended.integrity === null) throw new Error(`${dependency.name}@${dependency.recommended.version} 缺少 integrity`)
+    if (dependency.recommended.integrity === null) throw new Error(translate(locale, 'error.candidateIntegrityMissing', { package: dependency.name, version: dependency.recommended.version }))
     return [{
       profile: profile.name,
       package: dependency.name,
@@ -154,83 +157,85 @@ async function prepareStagedProfile(
   stagedPath: string,
   changes: readonly UpgradeChange[],
   preservedGit: readonly PreservedGitDependency[],
+  locale: Locale,
 ): Promise<void> {
   ensurePrivateDirectory(stagedPath)
   for (const name of PROFILE_COPY_FILES) {
     const source = join(profilePath, name)
-    if (existsSync(source)) safeCopyTree(source, join(stagedPath, name))
+    if (existsSync(source)) safeCopyTree(source, join(stagedPath, name), locale)
   }
   const patches = join(profilePath, 'patches')
-  if (existsSync(patches)) safeCopyTree(patches, join(stagedPath, 'patches'))
+  if (existsSync(patches)) safeCopyTree(patches, join(stagedPath, 'patches'), locale)
   const liveModules = join(profilePath, 'node_modules')
-  if (!existsSync(liveModules)) throw new Error(`profile 缺少 node_modules: ${profilePath}`)
+  if (!existsSync(liveModules)) throw new Error(translate(locale, 'error.profileModulesMissing', { path: profilePath }))
   await cloneDependencyTree(liveModules, join(stagedPath, 'node_modules'))
   const manifestPath = join(stagedPath, 'package.json')
-  if (!existsSync(manifestPath)) throw new Error(`profile 缺少 package.json: ${profilePath}`)
+  if (!existsSync(manifestPath)) throw new Error(translate(locale, 'error.profileManifestMissing', { path: profilePath }))
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dependencies?: Record<string, string> }
-  if (manifest.dependencies === undefined) throw new Error(`profile 没有 dependencies: ${profilePath}`)
+  if (manifest.dependencies === undefined) throw new Error(translate(locale, 'error.profileDependenciesMissing', { path: profilePath }))
   for (const change of changes) {
-    if (manifest.dependencies[change.package] === undefined) throw new Error(`profile 中找不到 ${change.package}`)
+    if (manifest.dependencies[change.package] === undefined) throw new Error(translate(locale, 'error.profilePackageMissing', { package: change.package }))
     manifest.dependencies[change.package] = change.to
   }
   for (const dependency of preservedGit) {
     if (manifest.dependencies[dependency.name] !== dependency.requested) {
-      throw new Error(`${dependency.name} 的 Git 声明在检查后发生变化`)
+      throw new Error(translate(locale, 'error.gitDeclarationChanged', { package: dependency.name }))
     }
     manifest.dependencies[dependency.name] = dependency.stagingSpecifier
   }
   writeJsonAtomic(manifestPath, manifest)
 }
 
-function restorePreservedGit(stagedPath: string, dependencies: readonly PreservedGitDependency[]): void {
+function restorePreservedGit(stagedPath: string, dependencies: readonly PreservedGitDependency[], locale: Locale): void {
   if (dependencies.length === 0) return
   const manifestPath = join(stagedPath, 'package.json')
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dependencies?: Record<string, string> }
-  if (manifest.dependencies === undefined) throw new Error('隔离 package.json 缺少 dependencies')
+  if (manifest.dependencies === undefined) throw new Error(translate(locale, 'error.stagedDependenciesMissing'))
   let lock = readFileSync(join(stagedPath, 'pnpm-lock.yaml'), 'utf8')
   for (const dependency of dependencies) {
     if (manifest.dependencies[dependency.name] !== dependency.stagingSpecifier) {
-      throw new Error(`${dependency.name} 的 staging 来源发生变化`)
+      throw new Error(translate(locale, 'error.stagedSourceChanged', { package: dependency.name }))
     }
     manifest.dependencies[dependency.name] = dependency.requested
     const plain = `specifier: ${dependency.stagingSpecifier}`
     const quoted = `specifier: '${dependency.stagingSpecifier}'`
     if (lock.includes(plain)) lock = lock.replace(plain, `specifier: ${dependency.requested}`)
     else if (lock.includes(quoted)) lock = lock.replace(quoted, `specifier: ${dependency.requested}`)
-    else throw new Error(`${dependency.name} 的 lockfile staging 声明无法恢复`)
+    else throw new Error(translate(locale, 'error.lockRestoreFailed', { package: dependency.name }))
   }
   writeJsonAtomic(manifestPath, manifest)
   writeFileSync(join(stagedPath, 'pnpm-lock.yaml'), lock, { mode: 0o600 })
 }
 
-function verifyCandidateIntegrity(stagedPath: string, changes: readonly UpgradeChange[]): void {
+function verifyCandidateIntegrity(stagedPath: string, changes: readonly UpgradeChange[], locale: Locale): void {
   const lock = readFileSync(join(stagedPath, 'pnpm-lock.yaml'), 'utf8')
   for (const change of changes) {
     if (!lock.includes(`integrity: ${change.integrity}`)) {
-      throw new Error(`${change.package}@${change.to} 的 lockfile integrity 与候选证据不一致`)
+      throw new Error(translate(locale, 'error.integrityMismatch', { package: change.package, version: change.to }))
     }
   }
 }
 
 export async function stageUpgrade(receipt: AssessmentReceipt, options: StageOptions = {}): Promise<UpgradePlan | null> {
-  const changes = collectChanges(receipt)
+  const locale = options.locale ?? 'en'
+  const changes = collectChanges(receipt, locale)
   if (changes.length === 0) return null
   const id = options.transactionId ?? randomUUID()
-  if (!/^[A-Za-z0-9-]+$/.test(id)) throw new Error('无效事务编号')
-  const stagingBase = join(receipt.dshHome, 'dshctl', 'staging')
+  if (!/^[A-Za-z0-9-]+$/.test(id)) throw new Error(translate(locale, 'error.invalidTransactionId'))
+  const stagingBase = join(receipt.dshHome, 'dshkeeper', 'staging')
   const stagingRoot = join(stagingBase, id)
-  if (!pathInside(stagingBase, stagingRoot)) throw new Error('无效隔离目录')
-  if (existsSync(stagingRoot)) throw new Error(`隔离事务已存在: ${id}`)
+  if (!pathInside(stagingBase, stagingRoot)) throw new Error(translate(locale, 'error.invalidStagingDirectory'))
+  if (existsSync(stagingRoot)) throw new Error(translate(locale, 'error.stagingExists', { id }))
   ensurePrivateDirectory(join(stagingRoot, 'profiles'))
   const env = { ...(options.env ?? process.env), DSH_HOME: stagingRoot }
-  const pnpm = new PnpmAdapter(env)
+  const pnpm = new PnpmAdapter(env, locale)
   const dsh = new DshAdapter(env)
   const installProfile = options.installProfile ?? (path => pnpm.install(path, { offline: true }))
   const checkProfile = options.checkProfile ?? (async (_home, profile) => (await dsh.checkConfig(profile)).ok)
 
   try {
     if (options.installProfile === undefined) {
-      options.onProgress?.(`正在缓存 ${new Set(changes.map(change => `${change.package}@${change.to}`)).size} 个推荐包及其依赖`)
+      options.onProgress?.(translate(locale, 'progress.cachePackages', { count: new Set(changes.map(change => `${change.package}@${change.to}`)).size }))
       await pnpm.addToStore(changes.map(change => ({ name: change.package, version: change.to })))
     }
     const profiles: StagedProfile[] = []
@@ -245,7 +250,7 @@ export async function stageUpgrade(receipt: AssessmentReceipt, options: StageOpt
         const stagingSpecifier = `https://codeload.github.com/${reference.owner}/${reference.repository}/tar.gz/${reference.ref}`
         const cachedResolution = liveLock.includes(stagingSpecifier)
         if (!cachedResolution && dependency.git?.error !== null && dependency.git?.error !== undefined) {
-          throw new Error(`${dependency.name} 远端不可达且没有可复用的同一 commit 缓存`)
+          throw new Error(translate(locale, 'error.gitRemoteNoCache', { package: dependency.name }))
         }
         if (!cachedResolution) return []
         return [{
@@ -256,36 +261,36 @@ export async function stageUpgrade(receipt: AssessmentReceipt, options: StageOpt
         }]
       })
       const stagedPath = join(stagingRoot, 'profiles', profile.name)
-      options.onProgress?.(`正在复制 ${profile.name} 的当前依赖树到隔离区`)
-      await prepareStagedProfile(profile.path, stagedPath, profileChanges, preservedGit)
-      options.onProgress?.(`正在隔离安装 ${profile.name} 的 ${profileChanges.length} 项更新`)
+      options.onProgress?.(translate(locale, 'progress.copyProfile', { profile: profile.name }))
+      await prepareStagedProfile(profile.path, stagedPath, profileChanges, preservedGit, locale)
+      options.onProgress?.(translate(locale, 'progress.installProfile', { profile: profile.name, count: profileChanges.length }))
       await installProfile(stagedPath)
-      restorePreservedGit(stagedPath, preservedGit)
-      verifyCandidateIntegrity(stagedPath, profileChanges)
+      restorePreservedGit(stagedPath, preservedGit, locale)
+      verifyCandidateIntegrity(stagedPath, profileChanges, locale)
       for (const change of profileChanges) {
         const installed = readInstalledManifest(stagedPath, change.package)?.version
-        if (installed !== change.to) throw new Error(`${profile.name} 未解析到预期的 ${change.package}@${change.to}`)
+        if (installed !== change.to) throw new Error(translate(locale, 'error.resolutionMismatch', { profile: profile.name, package: change.package, version: change.to }))
       }
       for (const dependency of preservedGit) {
         const installed = readInstalledManifest(stagedPath, dependency.name)?.version
         if (installed !== dependency.installedVersion) {
-          throw new Error(`${profile.name} 未保留 ${dependency.name}@${dependency.installedVersion}`)
+          throw new Error(translate(locale, 'error.preservedGitMismatch', { profile: profile.name, package: dependency.name, version: dependency.installedVersion }))
         }
       }
-      options.onProgress?.(`正在验证 ${profile.name} 的配置合成`)
-      if (!await checkProfile(stagingRoot, profile.name)) throw new Error(`${profile.name} 隔离配置验证失败`)
+      options.onProgress?.(translate(locale, 'progress.validateProfile', { profile: profile.name }))
+      if (!await checkProfile(stagingRoot, profile.name)) throw new Error(translate(locale, 'error.isolationConfigFailed', { profile: profile.name }))
       profiles.push({ name: profile.name, livePath: profile.path, stagedPath, changes: profileChanges })
     }
     return { transactionId: id, dshHome: receipt.dshHome, stagingRoot, profiles, changes }
   } catch (error) {
-    discardStage({ dshHome: receipt.dshHome, stagingRoot })
+    discardStage({ dshHome: receipt.dshHome, stagingRoot }, locale)
     throw error
   }
 }
 
-export function discardStage(plan: Pick<UpgradePlan, 'dshHome' | 'stagingRoot'>): void {
-  const stagingBase = join(plan.dshHome, 'dshctl', 'staging')
-  if (!pathInside(stagingBase, plan.stagingRoot)) throw new Error('拒绝清理非隔离目录')
+export function discardStage(plan: Pick<UpgradePlan, 'dshHome' | 'stagingRoot'>, locale: Locale = 'en'): void {
+  const stagingBase = join(plan.dshHome, 'dshkeeper', 'staging')
+  if (!pathInside(stagingBase, plan.stagingRoot)) throw new Error(translate(locale, 'error.refuseCleanup'))
   rmSync(plan.stagingRoot, { recursive: true, force: true })
 }
 
@@ -295,7 +300,7 @@ function saveJournal(path: string, journal: TransactionJournal): void {
 }
 
 function replaceFromStage(source: string, target: string, id: string): void {
-  const temporary = join(dirname(target), `.dshctl-${id}-${basename(target)}`)
+  const temporary = join(dirname(target), `.dshkeeper-${id}-${basename(target)}`)
   copyFileSync(source, temporary)
   renameSync(temporary, target)
 }
@@ -320,8 +325,10 @@ function restoreProfile(profile: ProfileJournal, transactionId: string): void {
 }
 
 export async function applyUpgrade(plan: UpgradePlan, options: ApplyOptions = {}): Promise<ApplyResult> {
+  const locale = options.locale ?? 'en'
   const runtime = options.runtime ?? new DshRuntimeController(options.env, {
     ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
+    locale,
   })
   const dshCheck = options.checkProfile ?? (async (home, profile) => {
     const dsh = new DshAdapter({ ...(options.env ?? process.env), DSH_HOME: home })
@@ -330,23 +337,23 @@ export async function applyUpgrade(plan: UpgradePlan, options: ApplyOptions = {}
   const runtimeSpecs: RuntimeSpec[] = []
   for (const profile of plan.profiles) {
     const matches = await runtime.inspect(profile.name)
-    if (matches.length > 1) throw new Error(`${profile.name} 有多个运行实例，无法安全自动重启`)
-    if (matches[0]?.port === null) throw new Error(`${profile.name} 正在交互终端中运行；请先退出后再升级`)
+    if (matches.length > 1) throw new Error(translate(locale, 'error.multipleRuntimes', { profile: profile.name }))
+    if (matches[0]?.port === null) throw new Error(translate(locale, 'error.interactiveRunning', { profile: profile.name }))
     if (matches[0] !== undefined) runtimeSpecs.push(matches[0])
   }
 
-  const transactionsRoot = join(plan.dshHome, 'dshctl', 'transactions')
+  const transactionsRoot = join(plan.dshHome, 'dshkeeper', 'transactions')
   const transactionPath = join(transactionsRoot, plan.transactionId)
-  if (!pathInside(transactionsRoot, transactionPath)) throw new Error('无效事务目录')
-  if (existsSync(transactionPath)) throw new Error(`事务已存在: ${plan.transactionId}`)
+  if (!pathInside(transactionsRoot, transactionPath)) throw new Error(translate(locale, 'error.invalidTransactionDirectory'))
+  if (existsSync(transactionPath)) throw new Error(translate(locale, 'error.transactionExists', { id: plan.transactionId }))
   ensurePrivateDirectory(transactionPath)
   const profiles: ProfileJournal[] = plan.profiles.map(profile => {
     const backupPath = join(transactionPath, 'profiles', profile.name)
     ensurePrivateDirectory(backupPath)
     const files = PROMOTED_FILES.map(name => ({ name, existed: existsSync(join(profile.livePath, name)) }))
     for (const file of files) if (file.existed) copyFileSync(join(profile.livePath, file.name), join(backupPath, file.name))
-    if (!existsSync(join(profile.livePath, 'node_modules'))) throw new Error(`${profile.name} 缺少当前 node_modules，拒绝切换`)
-    if (!existsSync(join(profile.stagedPath, 'node_modules'))) throw new Error(`${profile.name} 隔离 node_modules 不完整`)
+    if (!existsSync(join(profile.livePath, 'node_modules'))) throw new Error(translate(locale, 'error.liveModulesMissing', { profile: profile.name }))
+    if (!existsSync(join(profile.stagedPath, 'node_modules'))) throw new Error(translate(locale, 'error.stagedModulesMissing', { profile: profile.name }))
     return { name: profile.name, livePath: profile.livePath, stagedPath: profile.stagedPath, backupPath, files }
   })
   const now = new Date().toISOString()
@@ -367,7 +374,7 @@ export async function applyUpgrade(plan: UpgradePlan, options: ApplyOptions = {}
     journal.state = 'stopping'
     saveJournal(journalPath, journal)
     for (const service of runtimeSpecs) {
-      options.onProgress?.(`正在停止 ${service.profile}`)
+      options.onProgress?.(translate(locale, 'progress.stopProfile', { profile: service.profile }))
       await runtime.stop(service)
       stopped.push(service)
     }
@@ -375,7 +382,7 @@ export async function applyUpgrade(plan: UpgradePlan, options: ApplyOptions = {}
     journal.state = 'promoting'
     saveJournal(journalPath, journal)
     for (const profile of profiles) {
-      options.onProgress?.(`正在切换 ${profile.name}`)
+      options.onProgress?.(translate(locale, 'progress.switchProfile', { profile: profile.name }))
       renameSync(join(profile.livePath, 'node_modules'), join(profile.backupPath, 'node_modules'))
       renameSync(join(profile.stagedPath, 'node_modules'), join(profile.livePath, 'node_modules'))
       for (const file of profile.files) {
@@ -388,19 +395,19 @@ export async function applyUpgrade(plan: UpgradePlan, options: ApplyOptions = {}
     journal.state = 'validating'
     saveJournal(journalPath, journal)
     for (const profile of profiles) {
-      options.onProgress?.(`正在复核 ${profile.name} 的实际配置`)
-      if (!await dshCheck(plan.dshHome, profile.name)) throw new Error(`${profile.name} 切换后的配置验证失败`)
+      options.onProgress?.(translate(locale, 'progress.revalidateProfile', { profile: profile.name }))
+      if (!await dshCheck(plan.dshHome, profile.name)) throw new Error(translate(locale, 'error.liveConfigFailed', { profile: profile.name }))
     }
 
     journal.state = 'restarting'
     saveJournal(journalPath, journal)
     for (const service of runtimeSpecs) {
-      options.onProgress?.(`正在启动并检查 ${service.profile}`)
+      options.onProgress?.(translate(locale, 'progress.restartProfile', { profile: service.profile }))
       restarted.push(await runtime.start(service, plan.dshHome))
     }
     journal.state = 'committed'
     saveJournal(journalPath, journal)
-    discardStage(plan)
+    discardStage(plan, locale)
     return {
       transactionId: plan.transactionId,
       transactionPath,
@@ -418,7 +425,7 @@ export async function applyUpgrade(plan: UpgradePlan, options: ApplyOptions = {}
       journal.state = 'rolled-back'
       saveJournal(journalPath, journal)
       try {
-        discardStage(plan)
+        discardStage(plan, locale)
       } catch {
         // The live generation is already restored. A cleanup failure must not
         // misreport the rollback itself as failed; the journal retains paths.
@@ -427,8 +434,8 @@ export async function applyUpgrade(plan: UpgradePlan, options: ApplyOptions = {}
       journal.state = 'rollback-failed'
       journal.error = `${message}; rollback: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`
       saveJournal(journalPath, journal)
-      throw new Error(`升级失败且自动恢复未完成：${journal.error}；事务 ${transactionPath}`)
+      throw new Error(translate(locale, 'error.rollbackFailed', { message: journal.error, path: transactionPath }))
     }
-    throw new Error(`升级未生效，已自动恢复原版本：${message}`)
+    throw new Error(translate(locale, 'error.upgradeRecovered', { message }))
   }
 }

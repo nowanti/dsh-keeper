@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.34.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@^11.5.1
+      - name: Verify tag matches package version
+        run: node -e "const p=require('./package.json'); if ('v'+p.version !== process.env.GITHUB_REF_NAME) throw new Error('tag '+process.env.GITHUB_REF_NAME+' does not match package '+p.version)"
+      - run: pnpm check
+      - run: pnpm test:real-dsh
+        env:
+          DSH_E2E_VERSION: 0.1.1-rc.2
+      - name: Pack npm artifact
+        run: |
+          npm pack --json > npm-pack.json
+          node -e "const fs=require('fs'); const p=require('./npm-pack.json')[0].filename; fs.renameSync(p,'dshkeeper.tgz')"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dshkeeper.tgz
+      - name: Publish to npm with provenance
+        run: npm publish dshkeeper.tgz --access public --provenance
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dshkeeper.tgz --verify-tag --generate-notes --title "$GITHUB_REF_NAME"

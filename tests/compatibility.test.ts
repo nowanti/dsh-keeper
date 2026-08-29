@@ -26,7 +26,7 @@ describe('evaluateCompatibility', () => {
   it('blocks a candidate that requires a newer DSH', () => {
     const result = evaluateCompatibility({ dsh: { engines: { dsh: '>=0.1.2-alpha.1' } } }, host())
     assert.equal(result.state, 'blocked')
-    assert.match(result.blockers[0] ?? '', /需要 DSH/)
+    assert.equal(result.blockers[0]?.code, 'reason.dshMismatch')
   })
 
   it('uses a DSH peer as host contract evidence', () => {
@@ -46,7 +46,7 @@ describe('evaluateCompatibility', () => {
   it('keeps unresolved peers as staging evidence instead of a hard conflict', () => {
     const required = evaluateCompatibility({ peerDependencies: { missing: '^1.0.0' } }, host())
     assert.equal(required.state, 'unknown')
-    assert.match(required.warnings.join('\n'), /当前解析层未找到 peer/)
+    assert.equal(required.warnings[0]?.code, 'reason.peerMissing')
 
     const optional = evaluateCompatibility({
       dsh: { engines: { dsh: '>=0.1.1-rc.1' } },
@@ -54,7 +54,7 @@ describe('evaluateCompatibility', () => {
       peerDependenciesMeta: { missing: { optional: true } },
     }, host())
     assert.equal(optional.state, 'declared')
-    assert.doesNotMatch(optional.warnings.join('\n'), /当前解析层未找到 peer/)
+    assert.equal(optional.warnings.some(item => item.code === 'reason.peerMissing'), false)
   })
 
   it('warns instead of blocking when an installed optional peer is outside range', () => {
@@ -64,7 +64,7 @@ describe('evaluateCompatibility', () => {
       peerDependenciesMeta: { react: { optional: true } },
     }, host({ installedVersions: new Map([['react', '19.2.8']]) }))
     assert.equal(result.state, 'declared')
-    assert.match(result.warnings.join('\n'), /可选 peer react/)
+    assert.equal(result.warnings[0]?.code, 'reason.optionalPeerMismatch')
   })
 
   it('uses an installed and satisfied optional DSH peer as contract evidence', () => {
@@ -82,6 +82,6 @@ describe('evaluateCompatibility', () => {
       scripts: { postinstall: 'node setup.js' },
     }, host())
     assert.deepEqual(result.installScripts, ['postinstall'])
-    assert.match(result.warnings.join('\n'), /lifecycle script/)
+    assert.equal(result.warnings[0]?.code, 'reason.lifecycleScript')
   })
 })
