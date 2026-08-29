@@ -67,6 +67,30 @@ export function renderHuman(receipt: AssessmentReceipt, options: RenderOptions):
   return lines.join('\n')
 }
 
+export function renderUpgradeCandidates(receipt: AssessmentReceipt, options: RenderOptions): string {
+  const lines = [`发现 ${receipt.summary.recommendedUpdates} 项待验证插件更新。`]
+  for (const profile of receipt.profiles) {
+    const candidates = profile.dependencies.filter(item => item.status === 'upgrade' && item.recommended !== null)
+    if (candidates.length === 0) continue
+    lines.push(`\n${profile.name}：`)
+    for (const item of candidates) {
+      lines.push(`  ↑ ${item.name} ${item.installedVersion ?? '?'} → ${item.recommended?.version ?? '?'}`)
+    }
+  }
+  const held = receipt.summary.heldUpdates
+  const unknown = receipt.summary.unknown
+  if (held > 0 || unknown > 0) lines.push(`\n其余保持现状：${held} 个较新候选暂不升级，${unknown} 个来源状态未知。`)
+  lines.push(...unreachableRemovalAdvice(receipt))
+  if (options.verbose) {
+    for (const profile of receipt.profiles) {
+      for (const item of profile.dependencies.filter(value => value.status === 'hold')) {
+        lines.push(`  • ${profile.name}/${item.name}：${item.messages[0] ?? '证据不足'}`)
+      }
+    }
+  }
+  return lines.join('\n')
+}
+
 function unreachableRemovalAdvice(receipt: AssessmentReceipt): string[] {
   return receipt.profiles.flatMap(profile => profile.dependencies.flatMap(item => {
     if (item.source !== 'github' || item.git?.error === null || item.git?.error === undefined) return []
@@ -98,7 +122,7 @@ export function renderUpgradePlan(receipt: AssessmentReceipt, plan: UpgradePlan,
 }
 
 export function renderApplyResult(plan: UpgradePlan, result: ApplyResult): string {
-  const lines = [`升级完成：已应用 ${plan.changes.length} 项插件更新。`]
+  const lines = [`升级完成：${plan.changes.length} 项插件更新已通过隔离验证并应用。`]
   for (const service of result.restarted) lines.push(`✓ ${service.profile} 已重启，端口 ${service.port} 已恢复监听。`)
   if (result.restarted.length === 0) lines.push('现有常驻服务未受影响；更新将在 profile 下次启动时生效。')
   lines.push(`可恢复快照：${result.transactionPath}`)

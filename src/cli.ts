@@ -5,11 +5,20 @@ import { realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
 import { assessEnvironment, type AssessmentOptions } from './assess.js'
-import { Spinner } from './progress.js'
-import { renderApplyResult, renderHuman, renderUpgradePlan } from './render.js'
-import { applyUpgrade, discardStage, stageUpgrade } from './upgrade.js'
+import { Spinner, type ProgressOutput } from './progress.js'
+import { renderApplyResult, renderHuman, renderUpgradeCandidates, renderUpgradePlan } from './render.js'
+import {
+  applyUpgrade,
+  discardStage,
+  stageUpgrade,
+  type ApplyOptions,
+  type ApplyResult,
+  type StageOptions,
+  type UpgradePlan,
+} from './upgrade.js'
+import type { AssessmentReceipt } from './core/types.js'
 
-const VERSION = '0.2.1'
+const VERSION = '0.2.2'
 
 export interface CliOptions {
   command: 'status' | 'upgrade'
@@ -21,6 +30,45 @@ export interface CliOptions {
   dryRun: boolean
   yes: boolean
 }
+
+export interface CliDependencies {
+  assess?: (options: AssessmentOptions) => Promise<AssessmentReceipt>
+  stage?: (receipt: AssessmentReceipt, options?: StageOptions) => Promise<UpgradePlan | null>
+  apply?: (plan: UpgradePlan, options?: ApplyOptions) => Promise<ApplyResult>
+  discard?: (plan: Pick<UpgradePlan, 'dshHome' | 'stagingRoot'>) => void
+  confirm?: () => Promise<boolean>
+  interactive?: boolean
+  log?: (message: string) => void
+  error?: (message: string) => void
+  progressOutput?: ProgressOutput
+  now?: () => number
+}
+
+interface UpgradeTimings {
+  discoveryMs?: number
+  isolationMs?: number
+  applyMs?: number
+}
+
+function normalizedTimings(timings: UpgradeTimings): UpgradeTimings {
+  return Object.fromEntries(
+    Object.entries(timings).map(([key, value]) => [key, Math.max(0, Math.round(value))]),
+  )
+}
+
+function formatDuration(milliseconds: number): string {
+  const value = Math.max(0, milliseconds)
+  return value < 1_000 ? `${Math.round(value)}ms` : `${(value / 1_000).toFixed(1)}s`
+}
+
+function renderTimings(timings: UpgradeTimings): string {
+  const phases = [
+    timings.discoveryMs === undefined ? null : `候选发现 ${formatDuration(timings.discoveryMs)}`,
+    timings.isolationMs === undefined ? null : `隔离验证 ${formatDuration(timings.isolationMs)}`,
+    timings.applyMs === undefined ? null : `应用与恢复 ${formatDuration(timings.applyMs)}`,
+  ].filter((value): value is string => value !== null)
+  return phases.length === 0 ? '' : `用时：${phases.join('，')}。`
+}
 function usage(): string {
   return `dshctl ${VERSION}
 
@@ -29,7 +77,7 @@ function usage(): string {
   dshctl status [选项]
 
 命令:
-  upgrade              隔离验证推荐更新，确认后自动应用并回滚失败事务
+  upgrade              展示候选，确认后隔离验证、应用并回滚失败事务
   status               检查本地 DSH、profiles 和配置
 
 选项:
@@ -37,7 +85,7 @@ function usage(): string {
   --plugins-only       保持当前 DSH，只检查插件
   --preview            包含 prerelease 插件候选
   --dry-run            完成隔离验证，但不询问、不应用
-  -y, --yes            跳过确认，直接应用已通过隔离验证的推荐更新
+  -y, --yes            跳过确认，仍经隔离验证后自动应用推荐更新
   --json               输出机器可读 receipt
   -v, --verbose        显示更多保持原因
   -h, --help           显示帮助
@@ -96,32 +144,44 @@ export function parseArgs(args: readonly string[]): CliOptions | 'help' | 'versi
 async function confirmUpgrade(): Promise<boolean> {
   const readline = createInterface({ input: process.stdin, output: process.stdout })
   try {
-    const answer = (await readline.question('\n应用以上更新并自动恢复相关服务？[Y/n] ')).trim().toLowerCase()
+    const answer = (await readline.question('\n继续隔离验证，并在整组通过后应用？验证不通过不会切换现有 profile。[Y/n] ')).trim().toLowerCase()
     return answer === '' || answer === 'y' || answer === 'yes'
   } finally {
     readline.close()
   }
 }
 
-export async function main(args: readonly string[] = process.argv.slice(2)): Promise<number> {
+export async function main(
+  args: readonly string[] = process.argv.slice(2),
+  dependencies: CliDependencies = {},
+): Promise<number> {
+  const log = dependencies.log ?? (message => console.log(message))
+  const error = dependencies.error ?? (message => console.error(message))
+  const assess = dependencies.assess ?? assessEnvironment
+  const stage = dependencies.stage ?? stageUpgrade
+  const apply = dependencies.apply ?? applyUpgrade
+  const discard = dependencies.discard ?? discardStage
+  const confirm = dependencies.confirm ?? confirmUpgrade
+  const interactive = dependencies.interactive ?? (process.stdin.isTTY && process.stdout.isTTY)
+  const now = dependencies.now ?? Date.now
   let options: CliOptions | 'help' | 'version'
   try {
     options = parseArgs(args)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error(`错误: ${message}\n\n${usage()}`)
+  } catch (caught) {
+    const message = caught instanceof Error ? caught.message : String(caught)
+    error(`错误: ${message}\n\n${usage()}`)
     return 2
   }
   if (options === 'help') {
-    console.log(usage())
+    log(usage())
     return 0
   }
   if (options === 'version') {
-    console.log(VERSION)
+    log(VERSION)
     return 0
   }
 
-  const spinner = new Spinner(process.stderr, options.json ? { enabled: false } : {})
+  const spinner = new Spinner(dependencies.progressOutput ?? process.stderr, options.json ? { enabled: false } : {})
   const assessmentOptions: AssessmentOptions = {
     command: options.command,
     pluginsOnly: options.pluginsOnly,
@@ -129,54 +189,79 @@ export async function main(args: readonly string[] = process.argv.slice(2)): Pro
     onProgress: message => spinner.update(message),
     ...(options.profile === undefined ? {} : { profile: options.profile }),
   }
+  const timings: UpgradeTimings = {}
   spinner.start('正在准备检查')
   try {
-    const receipt = await assessEnvironment(assessmentOptions)
+    let receipt: AssessmentReceipt
+    const discoveryStarted = now()
+    try {
+      receipt = await assess(assessmentOptions)
+    } finally {
+      timings.discoveryMs = now() - discoveryStarted
+    }
     if (options.command === 'status') {
       spinner.stop()
-      console.log(options.json ? JSON.stringify(receipt, null, 2) : renderHuman(receipt, { verbose: options.verbose }))
+      log(options.json ? JSON.stringify(receipt, null, 2) : renderHuman(receipt, { verbose: options.verbose }))
       return receipt.summary.blocked > 0 ? 1 : 0
+    }
+
+    if (receipt.summary.recommendedUpdates === 0) {
+      spinner.stop()
+      if (options.json) log(JSON.stringify({ outcome: 'current', assessment: receipt, timings: normalizedTimings(timings) }, null, 2))
+      else log(`已经是当前兼容范围内的推荐状态。\n\n${renderHuman(receipt, { verbose: options.verbose })}\n${renderTimings(timings)}`)
+      return receipt.summary.blocked > 0 ? 1 : 0
+    }
+
+    const auditOnly = options.dryRun || (options.json && !options.yes)
+    if (!auditOnly) {
+      spinner.stop()
+      if (!options.json) log(renderUpgradeCandidates(receipt, { verbose: options.verbose }))
+      if (!options.yes && !interactive) {
+        error('\n非交互环境不会擅自应用；确认后请使用 -y。')
+        return 2
+      }
+      if (!options.yes && !await confirm()) {
+        log(`已取消；未下载候选包或执行隔离安装，现有 profile 没有变化。\n${renderTimings(timings)}`)
+        return 0
+      }
+      spinner.start('正在建立无凭据隔离环境')
     }
 
     spinner.update('正在建立无凭据隔离环境')
-    const plan = await stageUpgrade(receipt, {
-      onProgress: message => spinner.update(message),
-    })
+    let plan: UpgradePlan | null
+    const isolationStarted = now()
+    try {
+      plan = await stage(receipt, { onProgress: message => spinner.update(message) })
+    } finally {
+      timings.isolationMs = now() - isolationStarted
+    }
     spinner.stop()
-    if (plan === null) {
-      if (options.json) console.log(JSON.stringify({ outcome: 'current', assessment: receipt }, null, 2))
-      else console.log(`已经是当前兼容范围内的推荐状态。\n\n${renderHuman(receipt, { verbose: options.verbose })}`)
-      return receipt.summary.blocked > 0 ? 1 : 0
-    }
+    if (plan === null) throw new Error('候选清单在隔离验证前发生变化，拒绝继续')
 
-    if (!options.json) console.log(renderUpgradePlan(receipt, plan, { verbose: options.verbose }))
-    if (options.dryRun || (options.json && !options.yes)) {
-      discardStage(plan)
-      if (options.json) console.log(JSON.stringify({ outcome: 'staged', applied: false, assessment: receipt, plan }, null, 2))
-      else console.log('\n--dry-run：未修改现有 profile。')
-      return 0
-    }
-    if (!options.yes && (!process.stdin.isTTY || !process.stdout.isTTY)) {
-      discardStage(plan)
-      console.error('\n非交互环境不会擅自应用；确认后请使用 -y。')
-      return 2
-    }
-    if (!options.yes && !await confirmUpgrade()) {
-      discardStage(plan)
-      console.log('已取消；现有 profile 没有变化。')
+    if (auditOnly) {
+      discard(plan)
+      if (options.json) log(JSON.stringify({ outcome: 'staged', applied: false, assessment: receipt, plan, timings: normalizedTimings(timings) }, null, 2))
+      else log(`${renderUpgradePlan(receipt, plan, { verbose: options.verbose })}\n\n--dry-run：未修改现有 profile。\n${renderTimings(timings)}`)
       return 0
     }
 
-    spinner.start('正在建立可恢复快照')
-    const result = await applyUpgrade(plan, { onProgress: message => spinner.update(message) })
+    spinner.start('隔离验证通过，正在建立可恢复快照')
+    let result: ApplyResult
+    const applyStarted = now()
+    try {
+      result = await apply(plan, { onProgress: message => spinner.update(message) })
+    } finally {
+      timings.applyMs = now() - applyStarted
+    }
     spinner.stop()
-    if (options.json) console.log(JSON.stringify({ outcome: 'applied', assessment: receipt, plan, result }, null, 2))
-    else console.log(renderApplyResult(plan, result))
+    if (options.json) log(JSON.stringify({ outcome: 'applied', assessment: receipt, plan, result, timings: normalizedTimings(timings) }, null, 2))
+    else log(`${renderApplyResult(plan, result)}\n${renderTimings(timings)}`)
     return 0
-  } catch (error) {
+  } catch (caught) {
     spinner.stop()
-    const message = error instanceof Error ? error.message : String(error)
-    console.error(`错误: ${message}`)
+    const message = caught instanceof Error ? caught.message : String(caught)
+    const timing = options.command === 'upgrade' ? renderTimings(timings) : ''
+    error(`错误: ${message}${timing === '' ? '' : `\n${timing}`}`)
     return 1
   }
 }

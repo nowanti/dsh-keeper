@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { renderHuman } from '../src/render.js'
+import { renderHuman, renderUpgradeCandidates } from '../src/render.js'
 import type { AssessmentReceipt, DependencyAssessment } from '../src/core/types.js'
 
 function dependency(status: DependencyAssessment['status'], name: string): DependencyAssessment {
@@ -81,5 +81,15 @@ describe('renderHuman', () => {
   it('shows held candidate reasons in verbose output', () => {
     const output = renderHuman(receipt(), { verbose: true })
     assert.match(output, /hold-me/)
+  })
+})
+
+describe('renderUpgradeCandidates', () => {
+  it('labels exact updates as pending isolation validation', () => {
+    const output = renderUpgradeCandidates(receipt(), { verbose: false })
+    assert.match(output, /发现 1 项待验证插件更新/)
+    assert.match(output, /upgrade-me 1\.0\.0 → 2\.0\.0/)
+    assert.match(output, /1 个较新候选暂不升级/)
+    assert.doesNotMatch(output, /隔离验证通过/)
   })
 })
