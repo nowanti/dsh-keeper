@@ -4,7 +4,7 @@ import { connect } from 'node:net'
 import { dirname, join } from 'node:path'
 
 import { translate, type Locale } from '../i18n.js'
-import { commandInvocation, runCommand, type CommandResult } from './process.js'
+import { runCommand, type CommandResult } from './process.js'
 
 export interface RuntimeSpec {
   profile: string
@@ -165,17 +165,13 @@ export class DshRuntimeController implements RuntimeController {
     mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 })
     mkdirSync(dirname(pidPath), { recursive: true, mode: 0o700 })
     const logFd = openSync(logPath, 'a', 0o600)
-    const invocation = commandInvocation(
-      this.#binary,
-      ['--profile', runtime.profile, '--port', String(runtime.port)],
-      { ...this.#env, DSH_HOME: dshHome },
-      this.#platform,
-    )
-    const child = spawn(invocation.command, invocation.args, {
+    const child = spawn(this.#binary, ['--profile', runtime.profile, '--port', String(runtime.port)], {
       cwd: runtime.cwd,
-      env: invocation.env,
+      env: { ...this.#env, DSH_HOME: dshHome },
       detached: true,
-      shell: false,
+      // Windows cannot execute npm .cmd shims directly. These arguments are
+      // constrained to a validated profile name and a numeric port.
+      shell: this.#platform === 'win32',
       windowsHide: true,
       stdio: ['ignore', logFd, logFd],
     })

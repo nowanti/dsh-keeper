@@ -24,7 +24,7 @@ Linux 当前依赖 procps 兼容的 `ps`。`lsof` 只用于尽力恢复进程工
 
 Windows 采用独立平台 adapter：
 
-1. `dsh`、`pnpm` 的 `.cmd` 命令与参数先编码为 JSON，再通过环境变量交给受控 PowerShell runner；profile、包名和路径不会被插入 PowerShell 源码，生产调用仍只传递经过校验的命令参数。
+1. `dsh`、`pnpm` 的检查与安装命令先编码为 JSON，再通过环境变量交给受控 PowerShell runner；detached 服务启动只把已校验的 profile 名和数字端口交给 Windows shell，以兼容 npm `.cmd` shim。
 2. 运行实例由 `Get-CimInstance Win32_Process` 枚举，并重新定位真正监听端口的 DSH 子进程，而不是把 PowerShell wrapper PID 当服务 PID。
 3. 停止路径先尝试目标 PID，只有端口已关闭但进程树残留时才调用 `taskkill /T /F`；仍在监听时拒绝继续强制清理。
 4. 原生 CI 还必须证明 `.cmd` 实参不被解释、目录切换/回滚可用、detached 服务能被发现并停止。macOS 上的 platform mock 不算完成这项验收。
