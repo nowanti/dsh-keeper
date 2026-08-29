@@ -1,0 +1,30 @@
+{
+  "name": "dshctl",
+  "version": "0.1.0",
+  "private": true,
+  "description": "External lifecycle and compatibility manager for DeepSeek Harness",
+  "type": "module",
+  "bin": {
+    "dshctl": "dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm build && node --test dist/tests/*.test.js",
+    "check": "pnpm typecheck && pnpm test",
+    "dev": "node --enable-source-maps dist/src/cli.js"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "license": "MIT",
+  "packageManager": "pnpm@10.34.1",
+  "dependencies": {
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "@types/semver": "^7.8.0",
+    "typescript": "^7.0.2"
+  }
+}
