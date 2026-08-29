@@ -46,8 +46,10 @@ discover
 - 读取 profiles 和已安装 manifest；
 - 通过 pnpm 获取 npm 版本信息；
 - 通过 `dsh.engines.dsh`、Node engines 和 peer dependencies 判断声明兼容性；
+- peer 解析遵循 DSH 运行时可见顺序：插件/profile 已安装版本优先，DSH 安装目录作为宿主 fallback；当前层未解析到 peer 只留下 staging 证据，不伪装成确定冲突；
 - 对 GitHub 固定 commit 只比较远端 HEAD。因为尚未隔离安装该 commit，结果只能是 `unknown`；
 - 调用 `dsh --profile <name> --dump-config`，但不输出命令原始 stderr，防止日志内容泄漏。
+- 交互终端用单行 spinner 报告当前阶段；机器输出保持纯 JSON。
 
 `upgrade` 当前返回 `read-only` receipt，不会执行 package mutation。
 

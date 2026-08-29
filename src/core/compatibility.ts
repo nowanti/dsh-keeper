@@ -46,7 +46,7 @@ export function evaluateCompatibility(
     const installed = host.installedVersions.get(peer)
     const optional = manifest.peerDependenciesMeta?.[peer]?.optional === true
     if (installed === undefined) {
-      if (!optional) blockers.push(`缺少必需 peer ${peer}@${range}`)
+      if (!optional) warnings.push(`当前解析层未找到 peer ${peer}@${range}；交给隔离安装验证`)
       continue
     }
     const result = matches(installed, range)

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { assessEnvironment, type AssessmentOptions } from './assess.js'
+import { Spinner } from './progress.js'
 import { renderHuman } from './render.js'
 
 const VERSION = '0.1.0'
@@ -94,17 +95,22 @@ export async function main(args: readonly string[] = process.argv.slice(2)): Pro
     return 0
   }
 
+  const spinner = new Spinner(process.stderr, options.json ? { enabled: false } : {})
   const assessmentOptions: AssessmentOptions = {
     command: options.command,
     pluginsOnly: options.pluginsOnly,
     preview: options.preview,
+    onProgress: message => spinner.update(message),
     ...(options.profile === undefined ? {} : { profile: options.profile }),
   }
+  spinner.start('正在准备检查')
   try {
     const receipt = await assessEnvironment(assessmentOptions)
+    spinner.stop()
     console.log(options.json ? JSON.stringify(receipt, null, 2) : renderHuman(receipt, { verbose: options.verbose }))
     return receipt.summary.blocked > 0 ? 1 : 0
   } catch (error) {
+    spinner.stop()
     const message = error instanceof Error ? error.message : String(error)
     console.error(`错误: ${message}`)
     return 1

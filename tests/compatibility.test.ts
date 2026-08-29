@@ -43,9 +43,10 @@ describe('evaluateCompatibility', () => {
     assert.equal(result.state, 'unknown')
   })
 
-  it('blocks missing required peers but ignores optional peers', () => {
+  it('keeps unresolved peers as staging evidence instead of a hard conflict', () => {
     const required = evaluateCompatibility({ peerDependencies: { missing: '^1.0.0' } }, host())
-    assert.equal(required.state, 'blocked')
+    assert.equal(required.state, 'unknown')
+    assert.match(required.warnings.join('\n'), /当前解析层未找到 peer/)
 
     const optional = evaluateCompatibility({
       dsh: { engines: { dsh: '>=0.1.1-rc.1' } },
@@ -53,6 +54,7 @@ describe('evaluateCompatibility', () => {
       peerDependenciesMeta: { missing: { optional: true } },
     }, host())
     assert.equal(optional.state, 'declared')
+    assert.doesNotMatch(optional.warnings.join('\n'), /当前解析层未找到 peer/)
   })
 
   it('warns instead of blocking when an installed optional peer is outside range', () => {

@@ -15,6 +15,7 @@ dshctl upgrade
 - 检查 profile manifest、安装版本、bundle 和 patch 关系；
 - 使用 pnpm 查询 npm 更新；
 - 检查 npm 候选声明的 DSH、Node 和 peer dependency 兼容性；
+- 按插件自身、profile、DSH 安装目录的顺序解析宿主提供的 peer；
 - 检查固定 GitHub commit 与远端 HEAD 的差异；
 - 调用 DSH 的 `--dump-config` 做配置预检；
 - 给出可以继续验证、必须保持或证据不足的结论。
@@ -43,6 +44,8 @@ dshctl status
 - `--plugins-only`：明确保持当前 DSH。
 - `--preview`：允许显示 prerelease 候选，但当前仍不会应用。
 - `status`：只检查本地状态和配置，不查询更新。
+
+在交互终端中，耗时检查会显示单行旋转状态并动态更新当前 package；最终结果生成后自动清除。`--json` 或管道输出不会混入进度字符。
 
 可通过 `DSH_HOME` 指向其他 DSH home，通过 `DSH_BIN` 和 `PNPM_BIN` 覆盖命令路径。测试写入必须使用临时 `DSH_HOME`。
 

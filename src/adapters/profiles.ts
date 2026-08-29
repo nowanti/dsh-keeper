@@ -61,14 +61,20 @@ export function readInstalledManifest(profileDir: string, name: string): Package
   }
 }
 
-function scanInstalledVersions(profileDir: string): Map<string, string> {
-  const root = join(profileDir, 'node_modules')
+export function scanNodeModulesVersions(packageRoot: string): Map<string, string> {
+  const root = join(packageRoot, 'node_modules')
   const versions = new Map<string, string>()
   if (!existsSync(root)) return versions
 
   const record = (name: string): void => {
-    const manifest = readInstalledManifest(profileDir, name)
-    if (typeof manifest?.version === 'string') versions.set(name, manifest.version)
+    if (!isPackageName(name)) return
+    const path = join(root, ...name.split('/'), 'package.json')
+    try {
+      const manifest = readJson(path)
+      if (typeof manifest.version === 'string') versions.set(name, manifest.version)
+    } catch {
+      // Broken or incomplete package trees are represented by a missing version.
+    }
   }
 
   for (const entry of readdirSync(root, { withFileTypes: true })) {
@@ -108,7 +114,7 @@ export function discoverProfiles(dshHome: string): ProfileInventory[] {
       manifest,
       dependencies,
       bundles,
-      installedVersions: scanInstalledVersions(profileDir),
+      installedVersions: scanNodeModulesVersions(profileDir),
     })
   }
   return profiles.sort((a, b) => a.name.localeCompare(b.name))

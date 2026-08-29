@@ -33,6 +33,7 @@ export interface AssessmentOptions {
   pluginsOnly: boolean
   preview: boolean
   env?: NodeJS.ProcessEnv
+  onProgress?: (message: string) => void
 }
 interface Adapters {
   dsh: DshAdapter
@@ -123,6 +124,7 @@ async function assessNpmDependency(
   dshVersion: string,
   options: AssessmentOptions,
   adapters: Adapters,
+  hostVersions: ReadonlyMap<string, string>,
 ): Promise<DependencyAssessment> {
   const current = currentDependency(inventory, name, requested)
   const messages: string[] = []
@@ -184,10 +186,12 @@ async function assessNpmDependency(
     }
 
     const currentManifest = readInstalledManifest(inventory.path, name)
+    const installedVersions = new Map(hostVersions)
+    for (const [packageName, version] of inventory.installedVersions) installedVersions.set(packageName, version)
     const host: CompatibilityHost = {
       dshVersion,
       nodeVersion: process.versions.node,
-      installedVersions: inventory.installedVersions,
+      installedVersions,
     }
     let latestEvaluation: CompatibilityEvaluation | null = null
     let recommended: NpmCandidate | null = null
@@ -369,8 +373,10 @@ async function assessProfile(
   dshVersion: string,
   options: AssessmentOptions,
   adapters: Adapters,
+  hostVersions: ReadonlyMap<string, string>,
 ): Promise<ProfileAssessment> {
   const warnings: string[] = []
+  options.onProgress?.(`正在检查 ${inventory.name} 的配置与更新索引`)
   const [configProbe, outdated] = await Promise.all([
     adapters.dsh.checkConfig(inventory.name),
     options.command === 'upgrade'
@@ -383,9 +389,10 @@ async function assessProfile(
 
   const entries = [...inventory.dependencies.entries()]
   const dependencies = await mapLimit(entries, 6, async ([name, requested]) => {
+    options.onProgress?.(`正在检查 ${inventory.name}: ${name}`)
     const source = dependencySource(requested)
     if (source === 'npm') {
-      return assessNpmDependency(inventory, name, requested, outdated[name], dshVersion, options, adapters)
+      return assessNpmDependency(inventory, name, requested, outdated[name], dshVersion, options, adapters, hostVersions)
     }
     if (source === 'github') return assessGitDependency(inventory, name, requested, options, adapters)
     return assessOtherDependency(inventory, name, requested)
@@ -417,6 +424,7 @@ async function assessCore(
     return { current, recommended: current, preview: null, action: 'current', message: '已按 --plugins-only 固定 DSH' }
   }
   try {
+    options.onProgress?.('正在检查 DSH 推荐版本')
     const tags = await pnpm.coreTags()
     if (tags.latest === null) {
       return { current, recommended: null, preview: tags.next, action: 'unknown', message: 'npm 没有可用的 DSH latest tag' }
@@ -456,6 +464,7 @@ function summarize(profiles: readonly ProfileAssessment[]): AssessmentSummary {
 }
 
 export async function assessEnvironment(options: AssessmentOptions): Promise<AssessmentReceipt> {
+  options.onProgress?.('正在读取 DSH 与 profiles')
   const env = options.env ?? process.env
   const dshHome = dshHomeFromEnvironment(env)
   const allProfiles = discoverProfiles(dshHome)
@@ -472,15 +481,18 @@ export async function assessEnvironment(options: AssessmentOptions): Promise<Ass
     git: new GitAdapter(env),
   }
   const currentDsh = await adapters.dsh.version()
+  options.onProgress?.('正在读取 DSH 宿主依赖')
+  const hostVersions = adapters.dsh.installation()?.versions ?? new Map<string, string>()
   const dshVersionForEvaluation = currentDsh ?? '0.0.0-unknown'
   const [core, profiles] = await Promise.all([
     assessCore(currentDsh, options, adapters.pnpm),
-    mapLimit(inventories, 2, inventory => assessProfile(inventory, dshVersionForEvaluation, options, adapters)),
+    mapLimit(inventories, 2, inventory => assessProfile(inventory, dshVersionForEvaluation, options, adapters, hostVersions)),
   ])
 
   const notices = options.command === 'upgrade'
     ? ['当前里程碑只生成升级决策，没有修改 DSH、profile、lockfile、patch 或 bundle。']
     : ['status 只读取本地状态，没有查询插件更新。']
+  options.onProgress?.('正在整理检查结论')
   return {
     schemaVersion: 1,
     mode: options.command === 'upgrade' ? 'read-only-upgrade' : 'status',

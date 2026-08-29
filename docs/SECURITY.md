@@ -12,6 +12,7 @@ DSH 插件是宿主级代码。安装后可能访问工作区、文件系统、�
 
 - `<profile>/package.json`；
 - 已安装依赖的 `package.json`；
+- 当前 DSH 安装目录内宿主依赖的 `package.json`；
 - `pnpm-lock.yaml` 的非秘密依赖信息；
 - bundle 与 patch 的文件名、存在状态和 hash；
 - DSH/pnpm/Git 命令的受控状态输出。
