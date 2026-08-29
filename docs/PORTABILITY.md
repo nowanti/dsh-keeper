@@ -26,7 +26,7 @@ Windows 采用独立平台 adapter：
 
 1. `dsh`、`pnpm` 的检查与安装命令先编码为 JSON，再通过环境变量交给受控 PowerShell runner；detached 服务启动使用 Windows shell 打开 npm `.cmd` shim，但只接受无 shell 元字符的 binary path、受限 profile 名和有效数字端口，并且不走 Node 的 `shell + args` 拼接路径。
 2. 运行实例由 `Get-CimInstance Win32_Process` 枚举；恢复服务后则通过 `Get-NetTCPConnection` 定位真正监听目标端口的 DSH 子进程，而不是把 shell wrapper PID 当服务 PID。
-3. 停止路径先尝试目标 PID，只有端口已关闭但进程树残留时才调用 `taskkill /T /F`；仍在监听时拒绝继续强制清理。
+3. 停止路径先尝试目标 PID，只有端口已关闭但进程树残留时才调用 `taskkill /T /F`；恢复服务时还会跟踪并回收 `.cmd` launcher，避免遗留空壳进程。仍在监听时拒绝继续强制清理。
 4. 原生 CI 还必须证明 `.cmd` 实参不被解释、目录切换/回滚可用、detached 服务能被发现并停止。macOS 上的 platform mock 不算完成这项验收。
 
 ## 本地化实现

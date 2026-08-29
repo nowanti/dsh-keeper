@@ -93,6 +93,7 @@ export class DshRuntimeController implements RuntimeController {
   readonly #locale: Locale
   readonly #platform: NodeJS.Platform
   readonly #runCommand: typeof runCommand
+  readonly #windowsLaunchers = new Map<number, number>()
 
   constructor(env: NodeJS.ProcessEnv = process.env, options: RuntimeControllerOptions = {}) {
     this.#binary = env.DSH_BIN?.trim() || 'dsh'
@@ -153,14 +154,32 @@ export class DshRuntimeController implements RuntimeController {
     return Number.isSafeInteger(pid) && pid > 0 ? pid : null
   }
 
+  async #cleanupWindowsLauncher(servicePid: number): Promise<void> {
+    const launcherPid = this.#windowsLaunchers.get(servicePid)
+    this.#windowsLaunchers.delete(servicePid)
+    if (launcherPid === undefined || launcherPid === servicePid || !processExists(launcherPid)) return
+    await this.#runCommand('taskkill.exe', ['/PID', String(launcherPid), '/T', '/F'], {
+      timeoutMs: this.#forceGraceMs,
+      env: this.#env,
+      platform: this.#platform,
+    }).catch(() => undefined)
+    await waitForExit(launcherPid, this.#forceGraceMs)
+  }
+
   async stop(runtime: RuntimeSpec): Promise<void> {
-    if (!processExists(runtime.pid)) return
+    if (!processExists(runtime.pid)) {
+      if (this.#platform === 'win32') await this.#cleanupWindowsLauncher(runtime.pid)
+      return
+    }
     if (this.#platform !== 'win32') {
       process.kill(runtime.pid, 'SIGINT')
       if (await waitForExit(runtime.pid, this.#interruptGraceMs)) return
     }
     process.kill(runtime.pid, 'SIGTERM')
-    if (await waitForExit(runtime.pid, this.#terminateGraceMs)) return
+    if (await waitForExit(runtime.pid, this.#terminateGraceMs)) {
+      if (this.#platform === 'win32') await this.#cleanupWindowsLauncher(runtime.pid)
+      return
+    }
     if (runtime.port === null || await portListens(runtime.port)) {
       throw new Error(translate(this.#locale, 'error.processStillListening', { profile: runtime.profile, pid: runtime.pid }))
     }
@@ -178,7 +197,10 @@ export class DshRuntimeController implements RuntimeController {
       if (!processExists(runtime.pid)) return
       throw new Error(translate(this.#locale, 'error.processForceFailed', { profile: runtime.profile, pid: runtime.pid }))
     }
-    if (await waitForExit(runtime.pid, this.#forceGraceMs)) return
+    if (await waitForExit(runtime.pid, this.#forceGraceMs)) {
+      if (this.#platform === 'win32') await this.#cleanupWindowsLauncher(runtime.pid)
+      return
+    }
     throw new Error(translate(this.#locale, 'error.processForceSurvived', { profile: runtime.profile, pid: runtime.pid }))
   }
 
@@ -230,6 +252,7 @@ export class DshRuntimeController implements RuntimeController {
         throw new Error(translate(this.#locale, 'error.startFailed', { profile: runtime.profile }))
       }
       servicePid = listenerPid
+      this.#windowsLaunchers.set(servicePid, child.pid)
     }
     writeFileSync(pidPath, `${servicePid}\n`, { mode: 0o600 })
     return { ...runtime, pid: servicePid }
