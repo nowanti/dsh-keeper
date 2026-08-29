@@ -24,7 +24,8 @@ interface CommandInvocation {
 const WINDOWS_RUNNER = [
   "$payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:DSHKEEPER_COMMAND_PAYLOAD)) | ConvertFrom-Json",
   'Remove-Item Env:\\DSHKEEPER_COMMAND_PAYLOAD',
-  '& $payload.command @($payload.args)',
+  '$arguments = @($payload.args)',
+  '& $payload.command @arguments',
   'exit $LASTEXITCODE',
 ].join('; ')
 
