@@ -128,6 +128,23 @@ export class DshRuntimeController implements RuntimeController {
     return matches
   }
 
+  async #windowsListenerPid(port: number): Promise<number | null> {
+    const result = await this.#runCommand('powershell.exe', [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      '$connection = Get-NetTCPConnection -State Listen -LocalPort ([int]$env:DSHKEEPER_TARGET_PORT) -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -ne $connection) { [Console]::Out.Write($connection.OwningProcess) }',
+    ], {
+      timeoutMs: 10_000,
+      env: { ...this.#env, DSHKEEPER_TARGET_PORT: String(port) },
+      platform: this.#platform,
+    })
+    if (result.code !== 0 || result.timedOut) return null
+    const pid = Number(result.stdout.trim())
+    return Number.isSafeInteger(pid) && pid > 0 ? pid : null
+  }
+
   async stop(runtime: RuntimeSpec): Promise<void> {
     if (!processExists(runtime.pid)) return
     if (this.#platform !== 'win32') {
@@ -188,13 +205,15 @@ export class DshRuntimeController implements RuntimeController {
     }
     let servicePid = child.pid
     if (this.#platform === 'win32') {
-      const matches = await this.inspect(runtime.profile)
-      const service = matches.find(item => item.port === runtime.port)
-      if (service === undefined) {
+      // The shell and .cmd shim are only launchers. Resolve the process that
+      // actually owns the newly opened service port instead of guessing from
+      // wrapper command lines.
+      const listenerPid = await this.#windowsListenerPid(runtime.port)
+      if (listenerPid === null) {
         await this.#runCommand('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { timeoutMs: 5_000, env: this.#env, platform: this.#platform }).catch(() => undefined)
         throw new Error(translate(this.#locale, 'error.startFailed', { profile: runtime.profile }))
       }
-      servicePid = service.pid
+      servicePid = listenerPid
     }
     writeFileSync(pidPath, `${servicePid}\n`, { mode: 0o600 })
     return { ...runtime, pid: servicePid }
