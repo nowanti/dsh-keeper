@@ -18,6 +18,13 @@ export interface RuntimeController {
   start(runtime: RuntimeSpec, dshHome: string): Promise<RuntimeSpec>
 }
 
+export interface RuntimeControllerOptions {
+  interruptGraceMs?: number
+  terminateGraceMs?: number
+  forceGraceMs?: number
+  onProgress?: (message: string) => void
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -67,10 +74,18 @@ async function waitForPort(pid: number, port: number, timeoutMs: number): Promis
 export class DshRuntimeController implements RuntimeController {
   readonly #binary: string
   readonly #env: NodeJS.ProcessEnv
+  readonly #interruptGraceMs: number
+  readonly #terminateGraceMs: number
+  readonly #forceGraceMs: number
+  readonly #onProgress: ((message: string) => void) | undefined
 
-  constructor(env: NodeJS.ProcessEnv = process.env) {
+  constructor(env: NodeJS.ProcessEnv = process.env, options: RuntimeControllerOptions = {}) {
     this.#binary = env.DSH_BIN?.trim() || 'dsh'
     this.#env = { ...env }
+    this.#interruptGraceMs = options.interruptGraceMs ?? 10_000
+    this.#terminateGraceMs = options.terminateGraceMs ?? 5_000
+    this.#forceGraceMs = options.forceGraceMs ?? 3_000
+    this.#onProgress = options.onProgress
   }
 
   async inspect(profile: string): Promise<RuntimeSpec[]> {
@@ -99,10 +114,21 @@ export class DshRuntimeController implements RuntimeController {
   async stop(runtime: RuntimeSpec): Promise<void> {
     if (!processExists(runtime.pid)) return
     process.kill(runtime.pid, 'SIGINT')
-    if (await waitForExit(runtime.pid, 10_000)) return
+    if (await waitForExit(runtime.pid, this.#interruptGraceMs)) return
     process.kill(runtime.pid, 'SIGTERM')
-    if (await waitForExit(runtime.pid, 5_000)) return
-    throw new Error(`${runtime.profile} 进程 ${runtime.pid} 未能优雅退出`)
+    if (await waitForExit(runtime.pid, this.#terminateGraceMs)) return
+    if (runtime.port === null || await portListens(runtime.port)) {
+      throw new Error(`${runtime.profile} 进程 ${runtime.pid} 未能优雅退出且仍在监听，拒绝强制结束`)
+    }
+    this.#onProgress?.(`${runtime.profile} 已停止监听，但退出清理卡住；正在回收残留进程`)
+    try {
+      process.kill(runtime.pid, 'SIGKILL')
+    } catch {
+      if (!processExists(runtime.pid)) return
+      throw new Error(`${runtime.profile} 残留进程 ${runtime.pid} 无法强制结束`)
+    }
+    if (await waitForExit(runtime.pid, this.#forceGraceMs)) return
+    throw new Error(`${runtime.profile} 残留进程 ${runtime.pid} 在强制信号后仍存在`)
   }
 
   async start(runtime: RuntimeSpec, dshHome: string): Promise<RuntimeSpec> {

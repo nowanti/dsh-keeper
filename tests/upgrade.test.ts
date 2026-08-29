@@ -198,6 +198,7 @@ test('failed live validation restores files, node_modules and service', async ()
     assert.equal(installed.version, '1.0.0')
     const journal = JSON.parse(readFileSync(join(root, 'dshctl', 'transactions', 'apply-rollback', 'transaction.json'), 'utf8')) as { state: string }
     assert.equal(journal.state, 'rolled-back')
+    assert.equal(existsSync(plan.stagingRoot), false)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

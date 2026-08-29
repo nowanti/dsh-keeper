@@ -38,7 +38,7 @@ dshctl upgrade
 - profile 内的 Git 依赖必须以完整 commit 标识；移动分支或 tag 只能报告为风险，不能自动应用。
 - npm 候选必须保留版本和 integrity；来源、install script、权限或 patch 变化必须单独显示。
 - 缺少兼容声明只能标记为 `unknown`，不得伪装成 `compatible`。
-- 停止 DSH 使用 SIGINT/SIGTERM；不得使用 `kill -9` 作为正常流程。
+- 停止 DSH 正常路径使用 SIGINT/SIGTERM。只有两次宽限都耗尽、原监听端口已经关闭、PID 却仍卡在退出清理时，才允许用 SIGKILL 回收这个不再提供服务的残留进程；端口仍在监听时不得强杀。
 - 升级前已经不健康的常驻 profile 不得被伪报为升级验证通过；应阻止自动切换并给出修复方向。
 
 ## 状态语言

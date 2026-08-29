@@ -55,6 +55,7 @@ discover
 - 隔离安装和配置合成全部通过后才展示一次 `[Y/n]`；`-y/--yes` 是明确的非交互授权。
 - 写入前保存事务 journal 和旧 package、lockfile、`node_modules`；切换失败按相反顺序恢复。
 - 原本运行中的 Web profile 使用 SIGINT/SIGTERM 停止，切换后恢复相同 profile/端口并检查 TCP listener。交互式 TUI 运行中时拒绝自动切换。
+- 如果 DSH 已关闭监听却卡在 Node 原生线程退出清理，终止阶梯在两次宽限后只回收该残留 PID；仍在监听时拒绝强制结束。
 
 DSH 核心本体自动切换、隔离 Web UI/API smoke、TUI 启动 smoke 和显式 `rollback` 命令尚未实现。当前成功语义是插件依赖 `staged`，以及常驻 Web 进程/端口恢复；不是对每项插件功能的完整 `verified`。
 

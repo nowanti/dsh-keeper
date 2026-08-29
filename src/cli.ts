@@ -9,7 +9,7 @@ import { Spinner } from './progress.js'
 import { renderApplyResult, renderHuman, renderUpgradePlan } from './render.js'
 import { applyUpgrade, discardStage, stageUpgrade } from './upgrade.js'
 
-const VERSION = '0.2.0'
+const VERSION = '0.2.1'
 
 export interface CliOptions {
   command: 'status' | 'upgrade'

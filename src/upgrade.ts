@@ -320,7 +320,9 @@ function restoreProfile(profile: ProfileJournal, transactionId: string): void {
 }
 
 export async function applyUpgrade(plan: UpgradePlan, options: ApplyOptions = {}): Promise<ApplyResult> {
-  const runtime = options.runtime ?? new DshRuntimeController(options.env)
+  const runtime = options.runtime ?? new DshRuntimeController(options.env, {
+    ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
+  })
   const dshCheck = options.checkProfile ?? (async (home, profile) => {
     const dsh = new DshAdapter({ ...(options.env ?? process.env), DSH_HOME: home })
     return (await dsh.checkConfig(profile)).ok
@@ -415,6 +417,12 @@ export async function applyUpgrade(plan: UpgradePlan, options: ApplyOptions = {}
       for (const service of stopped) await runtime.start(service, plan.dshHome)
       journal.state = 'rolled-back'
       saveJournal(journalPath, journal)
+      try {
+        discardStage(plan)
+      } catch {
+        // The live generation is already restored. A cleanup failure must not
+        // misreport the rollback itself as failed; the journal retains paths.
+      }
     } catch (rollbackError) {
       journal.state = 'rollback-failed'
       journal.error = `${message}; rollback: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`
