@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { createInterface } from 'node:readline/promises'
+import { realpathSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 
 import { assessEnvironment, type AssessmentOptions } from './assess.js'
 import { Spinner } from './progress.js'
@@ -179,6 +181,16 @@ export async function main(args: readonly string[] = process.argv.slice(2)): Pro
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isMainModule(): boolean {
+  const entry = process.argv[1]
+  if (entry === undefined) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href
+  } catch {
+    return false
+  }
+}
+
+if (isMainModule()) {
   process.exitCode = await main()
 }
