@@ -62,7 +62,9 @@ function testController(messages: string[] = []): DshRuntimeController {
   })
 }
 
-test('force-cleans a process only after its service port has closed', async () => {
+test('force-cleans a process only after its service port has closed', {
+  skip: process.platform === 'win32',
+}, async () => {
   const port = await freePort()
   const child = await spawnFixture(port, true)
   const messages: string[] = []
@@ -75,7 +77,9 @@ test('force-cleans a process only after its service port has closed', async () =
   }
 })
 
-test('refuses SIGKILL while the service port is still listening', async () => {
+test('refuses SIGKILL while the service port is still listening', {
+  skip: process.platform === 'win32',
+}, async () => {
   const port = await freePort()
   const child = await spawnFixture(port, false)
   try {

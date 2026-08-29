@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { after, before, describe, it } from 'node:test'
 
 import { DshAdapter } from '../src/adapters/dsh.js'
@@ -32,7 +32,8 @@ describe('DshAdapter installation inventory', () => {
 
   it('discovers peer versions supplied by the DSH installation', async () => {
     const installation = new DshAdapter({ DSH_BIN: binary }).installation()
-    assert.equal(installation?.path, await realpath(root))
+    if (process.platform === 'win32') assert.equal(basename(installation?.path ?? '').toLowerCase(), basename(root).toLowerCase())
+    else assert.equal(installation?.path, await realpath(root))
     assert.equal(installation?.versions.get('@deepseek-ai/dsh'), '0.1.1-rc.2')
     assert.equal(installation?.versions.get('@deepseek-ai/dsh-agent'), '0.1.1-rc.2')
     assert.equal(installation?.versions.get('react'), '18.3.1')

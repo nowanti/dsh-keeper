@@ -65,10 +65,10 @@ async function portListens(port: number): Promise<boolean> {
   })
 }
 
-async function waitForPort(pid: number, port: number, timeoutMs: number): Promise<boolean> {
+async function waitForPort(pid: number, port: number, timeoutMs: number, requireLauncher: boolean): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    if (!processExists(pid)) return false
+    if (requireLauncher && !processExists(pid)) return false
     if (await portListens(port)) return true
     await new Promise(resolve => setTimeout(resolve, 200))
   }
@@ -182,7 +182,7 @@ export class DshRuntimeController implements RuntimeController {
     closeSync(logFd)
     if (child.pid === undefined) throw new Error(translate(this.#locale, 'error.startFailed', { profile: runtime.profile }))
     child.unref()
-    if (!await waitForPort(child.pid, runtime.port, 15_000)) {
+    if (!await waitForPort(child.pid, runtime.port, 15_000, this.#platform !== 'win32')) {
       if (processExists(child.pid)) {
         if (this.#platform === 'win32') {
           await this.#runCommand('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { timeoutMs: 5_000, env: this.#env, platform: this.#platform }).catch(() => undefined)
