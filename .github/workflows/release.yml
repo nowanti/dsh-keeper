@@ -44,6 +44,11 @@ jobs:
           subject-path: dshkeeper.tgz
       - name: Publish to npm with provenance
         run: npm publish dshkeeper.tgz --access public --provenance
+        env:
+          # Used only for the one-time bootstrap publish. Leave the repository
+          # secret absent after npm Trusted Publishing is configured; npm then
+          # exchanges the GitHub OIDC identity instead.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

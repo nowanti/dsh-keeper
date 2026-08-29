@@ -1,5 +1,7 @@
 # dshkeeper
 
+[![CI](https://github.com/nowanti/dshkeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/nowanti/dshkeeper/actions/workflows/ci.yml)
+
 `dshkeeper` is an external lifecycle and compatibility manager for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). Its default workflow is intentionally one command:
 
 ```bash
@@ -72,7 +74,7 @@ JSON receipts are language-neutral. Compatibility and decision explanations use 
 
 ## Platform status
 
-The implementation targets macOS, Linux, and Windows. Every public support claim is gated by native GitHub-hosted runners; the CI matrix also creates a real DSH profile and executes `dsh --dump-config` through `dshkeeper`. See [Portability and localization](docs/PORTABILITY.md) for the current evidence and remaining boundaries.
+macOS, Linux, and Windows are covered by native GitHub-hosted runners. The matrix runs unit/transaction tests, bilingual CLI smoke tests, package inspection, and a real DSH profile with `dsh --dump-config`. See [Portability and localization](docs/PORTABILITY.md) for the exact evidence and remaining boundaries.
 
 ## Development
 

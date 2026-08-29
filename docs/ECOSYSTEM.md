@@ -15,7 +15,7 @@
 
 `dshup` 也已经被 [`zhangjiabo522/dshup`](https://github.com/zhangjiabo522/dshup) 用作 Windows DSH 桌面客户端。继续复用这些名字会让“遥控 DSH”“启动 DSH”和“安全升级 DSH”三个目标混在同一搜索结果中。
 
-最终名称 `dshkeeper` 表达的是守住一套可恢复、兼容的 DSH generation，而不是替代 pnpm 或只执行一次版本加一。调研时 npm 名称可用，GitHub 没有同名仓库；正式创建和发布前仍须再次检查，因为名称状态可能变化。
+最终名称 `dshkeeper` 表达的是守住一套可恢复、兼容的 DSH generation，而不是替代 pnpm 或只执行一次版本加一。公开仓库已经建立为 [`nowanti/dshkeeper`](https://github.com/nowanti/dshkeeper)；截至 2026-08-29，npm 同名包尚未完成首次登记。
 
 ## 发现路径
 
