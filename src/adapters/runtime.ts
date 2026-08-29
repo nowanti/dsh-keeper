@@ -1,10 +1,10 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { closeSync, mkdirSync, openSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { dirname, join } from 'node:path'
 
 import { translate, type Locale } from '../i18n.js'
-import { commandInvocation, runCommand, type CommandResult } from './process.js'
+import { runCommand, type CommandResult } from './process.js'
 
 export interface RuntimeSpec {
   profile: string
@@ -31,6 +31,14 @@ export interface RuntimeControllerOptions {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+export function windowsServiceCommandLine(binary: string, profile: string, port: number): string | null {
+  if (!/^[A-Za-z0-9._-]+$/.test(profile) || !Number.isSafeInteger(port) || port < 1 || port > 65_535) return null
+  // cmd.exe expands these characters even when callers expect a single path
+  // token. Reject uncommon custom paths instead of attempting fragile escaping.
+  if (binary.trim() === '' || /["\r\n%&|<>^!]/.test(binary)) return null
+  return `"${binary}" --profile ${profile} --port ${port}`
 }
 
 function processExists(pid: number): boolean {
@@ -182,20 +190,24 @@ export class DshRuntimeController implements RuntimeController {
     mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 })
     mkdirSync(dirname(pidPath), { recursive: true, mode: 0o700 })
     const logFd = openSync(logPath, 'a', 0o600)
-    const invocation = commandInvocation(
-      this.#binary,
-      ['--profile', runtime.profile, '--port', String(runtime.port)],
-      { ...this.#env, DSH_HOME: dshHome },
-      this.#platform,
-    )
-    const child = spawn(invocation.command, invocation.args, {
+    const childOptions: SpawnOptions = {
       cwd: runtime.cwd,
-      env: invocation.env,
+      env: { ...this.#env, DSH_HOME: dshHome },
       detached: true,
-      shell: false,
       windowsHide: true,
       stdio: ['ignore', logFd, logFd],
-    })
+    }
+    let child: ChildProcess
+    if (this.#platform === 'win32') {
+      const commandLine = windowsServiceCommandLine(this.#binary, runtime.profile, runtime.port)
+      if (commandLine === null) throw new Error(translate(this.#locale, 'error.startFailed', { profile: runtime.profile }))
+      // Windows needs cmd.exe to open npm's .cmd shim. Pass one strictly
+      // validated command line and no args, avoiding Node's unsafe
+      // shell-plus-args path.
+      child = spawn(commandLine, { ...childOptions, shell: true })
+    } else {
+      child = spawn(this.#binary, ['--profile', runtime.profile, '--port', String(runtime.port)], { ...childOptions, shell: false })
+    }
     closeSync(logFd)
     if (child.pid === undefined) throw new Error(translate(this.#locale, 'error.startFailed', { profile: runtime.profile }))
     child.unref()

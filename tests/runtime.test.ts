@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { DshRuntimeController, type RuntimeSpec } from '../src/adapters/runtime.js'
+import { DshRuntimeController, type RuntimeSpec, windowsServiceCommandLine } from '../src/adapters/runtime.js'
 import type { CommandResult } from '../src/adapters/process.js'
 
 async function freePort(): Promise<number> {
@@ -106,6 +106,16 @@ test('discovers DSH processes through the Windows CIM adapter', async () => {
     runCommand: async () => output,
   })
   assert.deepEqual(await controller.inspect('web'), [{ profile: 'web', pid: 42, port: 3080, cwd: process.cwd() }])
+})
+
+test('builds only constrained Windows service command lines', () => {
+  assert.equal(
+    windowsServiceCommandLine('C:\\Program Files\\dsh.cmd', 'web-dev', 3080),
+    '"C:\\Program Files\\dsh.cmd" --profile web-dev --port 3080',
+  )
+  assert.equal(windowsServiceCommandLine('dsh.cmd & whoami', 'web', 3080), null)
+  assert.equal(windowsServiceCommandLine('dsh.cmd', 'web & whoami', 3080), null)
+  assert.equal(windowsServiceCommandLine('dsh.cmd', 'web', 70_000), null)
 })
 
 async function listening(port: number): Promise<boolean> {
