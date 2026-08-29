@@ -26,14 +26,15 @@ npm 只有在包已经存在后才能为它配置 Trusted Publisher。因此首�
 
 1. 创建公开仓库 `nowanti/dshkeeper` 并让 CI 全绿；
 2. npm 账号启用 2FA，并确认 `dshkeeper` 名称仍可用；
-3. 用一次性、仅限此包的 granular token 从 GitHub-hosted release job 发布首版；
-4. 立即在 npm 包设置中配置 Trusted Publisher：
+3. 在 npm 网站创建短期 granular token：Packages and scopes 设为 `Read and write` + `All Packages`，开启 `Bypass 2FA`。首版发布前包尚不存在，无法把 token 限定为该包；因此有效期应尽可能短，只放进 GitHub `npm` environment 的 `NPM_TOKEN` secret；
+4. 推送首个版本 tag，让 GitHub-hosted release job 完成登记；
+5. 立即在 npm 包设置中配置 Trusted Publisher：
    - owner: `nowanti`
    - repository: `dshkeeper`
    - workflow: `release.yml`
    - environment: `npm`
    - allowed action: publish
-5. 删除引导 token，之后只保留 OIDC；必要时将传统 token 发布彻底禁用。
+6. 删除 npm token 和 GitHub `NPM_TOKEN` secret，之后只保留 OIDC，并在包的 Publishing access 中禁用 token 发布。
 
 首次引导不应在本地电脑直接发布：那样无法把首版构建可靠地绑定到公开仓库和 GitHub-hosted workflow。
 
