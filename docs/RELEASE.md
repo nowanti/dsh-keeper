@@ -44,8 +44,8 @@ npm 只有在包已经存在后才能为它配置 Trusted Publisher。因此首�
 pnpm check
 pnpm test:real-dsh
 npm pack --dry-run
-git tag v0.3.0
-git push origin v0.3.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 不要在本地执行正式 `npm publish`。tag 推送后以 GitHub Actions、npm provenance 和 GitHub Release 三处结果共同验收。相同 name/version 一旦发布不能复用，因此失败后应修复并增加版本号。

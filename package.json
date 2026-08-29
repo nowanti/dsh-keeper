@@ -1,6 +1,6 @@
 {
   "name": "dsh-keeper",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "External lifecycle and compatibility manager for DeepSeek Harness",
   "type": "module",
   "bin": {

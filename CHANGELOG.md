@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Keep lifecycle-script output out of the release pack manifest so the first npm publication can consume valid JSON.
+
 ## 0.3.0
 
 - Rename the public project and npm package to `dsh-keeper`; use `dshk` as the primary executable and `dsh-keeper` as its explicit alias.

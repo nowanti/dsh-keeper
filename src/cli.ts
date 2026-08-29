@@ -19,7 +19,7 @@ import {
 import type { AssessmentReceipt } from './core/types.js'
 import { normalizeLocale, resolveLocale, translate, type Locale } from './i18n.js'
 
-const VERSION = '0.3.0'
+const VERSION = '0.3.1'
 
 export interface CliOptions {
   command: 'status' | 'upgrade'

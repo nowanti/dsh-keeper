@@ -37,7 +37,9 @@ jobs:
           DSH_E2E_VERSION: 0.1.1-rc.2
       - name: Pack npm artifact
         run: |
-          npm pack --json > npm-pack.json
+          # The package was already built and verified above. Skipping lifecycle
+          # scripts keeps their stdout from corrupting npm's JSON response.
+          npm pack --json --ignore-scripts > npm-pack.json
           node -e "const fs=require('fs'); const p=require('./npm-pack.json')[0].filename; fs.renameSync(p,'dsh-keeper.tgz')"
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
