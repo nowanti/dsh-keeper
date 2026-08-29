@@ -152,6 +152,8 @@ test('starts, discovers, and stops a detached DSH shim on native Windows', {
     await controller.stop(started)
     assert.equal(await listening(port), false)
   } finally {
-    rmSync(root, { recursive: true, force: true })
+    // Windows may briefly retain the detached launcher's working-directory
+    // handle after its service child has exited.
+    rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
   }
 })
