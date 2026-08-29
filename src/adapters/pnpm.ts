@@ -21,6 +21,15 @@ function parseJson<T>(value: string): T {
   return JSON.parse(trimmed) as T
 }
 
+function safeFailureSummary(value: string): string {
+  const scrubbed = value
+    .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/gi, 'https://[redacted]@')
+    .replace(/([?&](?:token|key|secret|password)=)[^&\s]+/gi, '$1[redacted]')
+  const lines = scrubbed.split('\n').map(line => line.trim()).filter(Boolean)
+  const diagnostic = lines.filter(line => /(?:ERR_|fatal:|Command failed|repository|could not read|not found|permission denied)/i.test(line))
+  return (diagnostic.length > 0 ? diagnostic.slice(0, 4) : lines.slice(-4)).map(line => line.slice(0, 300)).join(' | ')
+}
+
 export class PnpmAdapter {
   readonly binary: string
   readonly #versionCache = new Map<string, Promise<string[]>>()
@@ -42,6 +51,40 @@ export class PnpmAdapter {
     if (result.code !== 0 && result.code !== 1) throw new Error('pnpm outdated failed')
     const parsed = parseJson<Record<string, OutdatedEntry>>(result.stdout)
     return parsed && typeof parsed === 'object' ? parsed : {}
+  }
+
+  async addToStore(packages: ReadonlyArray<{ name: string; version: string }>): Promise<void> {
+    const unique = [...new Set(packages.map(item => {
+      if (!isPackageName(item.name) || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(item.version)) {
+        throw new Error(`invalid package candidate: ${item.name}@${item.version}`)
+      }
+      return `${item.name}@${item.version}`
+    }))]
+    if (unique.length === 0) return
+    const result = await runCommand(this.binary, ['store', 'add', ...unique], {
+      timeoutMs: 5 * 60_000,
+      env: this.#env,
+    })
+    if (result.code !== 0 || result.timedOut) {
+      if (result.timedOut) throw new Error('pnpm store add 超时')
+      const detail = safeFailureSummary(result.stderr || result.stdout)
+      throw new Error(detail === '' ? 'pnpm store add 失败' : `pnpm store add 失败：${detail}`)
+    }
+  }
+
+  async install(profileDir: string, options: { offline?: boolean } = {}): Promise<void> {
+    const args = ['install', '--no-frozen-lockfile']
+    if (options.offline === true) args.push('--offline')
+    const result = await runCommand(this.binary, args, {
+      cwd: profileDir,
+      timeoutMs: 5 * 60_000,
+      env: this.#env,
+    })
+    if (result.code !== 0 || result.timedOut) {
+      if (result.timedOut) throw new Error('pnpm install 超时')
+      const detail = safeFailureSummary(result.stderr || result.stdout)
+      throw new Error(detail === '' ? 'pnpm install 失败' : `pnpm install 失败：${detail}`)
+    }
   }
 
   async coreTags(): Promise<CoreTags> {

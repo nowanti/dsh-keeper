@@ -435,7 +435,7 @@ async function assessCore(
         recommended: tags.latest,
         preview: tags.next,
         action: 'hold',
-        message: '发现较新的推荐 DSH；当前只读版本尚未完成整套 profile staging，因此保持当前版本',
+        message: '发现较新的推荐 DSH；DSH 核心切换尚未纳入本次插件事务，因此保持当前版本',
       }
     }
     return {
@@ -490,7 +490,7 @@ export async function assessEnvironment(options: AssessmentOptions): Promise<Ass
   ])
 
   const notices = options.command === 'upgrade'
-    ? ['当前里程碑只生成升级决策，没有修改 DSH、profile、lockfile、patch 或 bundle。']
+    ? ['候选检查本身不会写入 profile；推荐项仍须通过隔离安装与配置验证。']
     : ['status 只读取本地状态，没有查询插件更新。']
   options.onProgress?.('正在整理检查结论')
   return {

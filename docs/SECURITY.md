@@ -34,14 +34,23 @@ DSH 插件是宿主级代码。安装后可能访问工作区、文件系统、�
 
 ## 自动升级门槛
 
-未来只有同时满足以下条件的候选才能自动切换：
+只有同时满足以下条件的候选才能自动切换：
 
 - 来源没有改变；
 - npm artifact 有精确版本与 integrity，或 Git 使用完整 commit；
 - 没有新增 lifecycle install script；
 - 没有权限扩大；
-- profile 整体 resolution、配置和运行验证通过；
+- profile 整体 resolution、精确版本安装和配置合成通过；
 - 已创建可恢复的 generation snapshot；
-- 切换后的 live probe 通过。
+- 切换后的 live 配置复核通过；原本运行中的 Web profile 必须恢复进程和监听端口。
 
 任何一项证据缺失都必须保持当前版本或请求用户批准，不能通过静默禁用插件来获得绿色结果。
+
+## 隔离与远端失联
+
+- staging 只复制 manifest、lock、composition、patch 和 `node_modules`；不复制 `.credentials.yaml`、session、storage 或插件私有状态。
+- staging 根目录与事务目录使用用户私有权限。失败输出只保留经过 token/userinfo 脱敏的少量诊断行，不回显完整安装日志。
+- 远端不可达不等于插件应被删除。完整 commit 已安装、lockfile 有相同 tarball resolution 且 pnpm cache 仍有相同 artifact 时，staging 可以复用该 artifact；最终 package 与 lock 必须恢复原 Git specifier，且版本必须与当前安装一致。
+- 如果缓存也不存在，整笔 staging 失败；工具不会卸载该插件，也不会把它静默替换为本地 `file:` 来源。
+
+当前尚未把每项插件的 UI/API/TUI 功能测试纳入自动门槛，因此输出应区分 `staged` 与完整 `verified`。事务快照用于启动失败时自动恢复，不应被描述为已证明所有插件业务功能正常。
