@@ -51,7 +51,7 @@ discover
 - 对 GitHub 固定 commit 只比较远端 HEAD。因为尚未隔离安装该 commit，结果只能是 `unknown`；
 - 调用 `dsh --profile <name> --dump-config`，但不输出命令原始 stderr，防止日志内容泄漏。
 - 交互终端用单行 spinner 报告当前阶段；机器输出保持纯 JSON。
-- 结果记录候选发现、隔离验证、应用与恢复的分阶段耗时；耗时只用于反馈和性能诊断，不参与兼容性决策。
+- 结果记录候选发现、隔离验证、应用与恢复的分阶段耗时；只在 `--verbose` 和 JSON 中展示，且不参与兼容性决策。
 - 将候选 npm artifacts 预取到 pnpm store，再对当前 `node_modules` 做文件系统隔离副本和增量安装。
 - lockfile 已记录同一 commit tarball 的固定 Git 依赖在 staging 内复用 pnpm cache，避免每个 profile 重复访问远端；安装后恢复原 Git specifier 并验证已安装版本未变，live profile 不发生来源迁移。
 - 发现并展示精确候选后显示一次 `[Y/n]`；确认授权对这组候选执行隔离验证，并在整组通过后自动应用。隔离结果不能新增或替换已展示候选。
@@ -108,8 +108,11 @@ src
 
 ## 后续里程碑
 
-1. 在隔离端口完成 Web API/UI 和 TUI smoke，把 `staged` 提升为关键路径 `verified`。
-2. 增加显式 `rollback` 与进程崩溃后的 journal 自动恢复。
-3. 将 DSH 核心本体纳入同一个版本求解与 generation 事务。
-4. 用跨平台 reflink 与复用 assessment cache 继续压缩等待时间。
-5. 吸收旧 Bash `dshctl` 的其余服务命令并移除旧入口。
+1. 把内部判断文本改为稳定 reason code，并增加英文/简体中文 renderer、locale 自动选择、`--lang` 与 `DSHCTL_LANG`。
+2. 完成 Windows `.cmd` 命令启动、进程发现和终止适配，并在原生 Windows 运行同一套事务测试。
+3. 在 Linux 真实 DSH profile 上完成状态、隔离升级、回滚和服务恢复 E2E。
+4. 在隔离端口完成 Web API/UI 和 TUI smoke，把 `staged` 提升为关键路径 `verified`。
+5. 增加显式 `rollback` 与进程崩溃后的 journal 自动恢复。
+6. 将 DSH 核心本体纳入同一个版本求解与 generation 事务。
+7. 用跨平台 reflink 与复用 assessment cache 继续压缩等待时间。
+8. 吸收旧 Bash `dshctl` 的其余服务命令并移除旧入口。

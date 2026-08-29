@@ -63,7 +63,6 @@ export function renderHuman(receipt: AssessmentReceipt, options: RenderOptions):
 
   lines.push('')
   lines.push(`结论：${receipt.summary.recommendedUpdates} 个候选可进入隔离验证；${receipt.summary.heldUpdates} 个保持；${receipt.summary.unknown} 个未知；${receipt.summary.blocked} 个阻塞。`)
-  lines.push(...receipt.notices)
   return lines.join('\n')
 }
 

@@ -136,7 +136,7 @@ test('interactive cancellation happens before isolation staging', async () => {
   assert.deepEqual(events, ['assess', 'confirm'])
   assert.match(logs[0] ?? '', /发现 1 项待验证插件更新/)
   assert.match(logs.at(-1) ?? '', /未下载候选包或执行隔离安装/)
-  assert.match(logs.at(-1) ?? '', /候选发现 1\.0s/)
+  assert.doesNotMatch(logs.at(-1) ?? '', /用时：/)
 })
 
 test('confirmed upgrade validates in isolation before applying', async () => {
@@ -151,7 +151,7 @@ test('confirmed upgrade validates in isolation before applying', async () => {
   assert.equal(await main(['upgrade'], dependencies), 0)
   assert.deepEqual(events, ['assess', 'confirm', 'stage', 'apply'])
   assert.match(logs.at(-1) ?? '', /升级完成/)
-  assert.match(logs.at(-1) ?? '', /候选发现 1\.0s，隔离验证 1\.0s，应用与恢复 1\.0s/)
+  assert.doesNotMatch(logs.at(-1) ?? '', /用时：/)
 })
 
 test('-y skips only confirmation and retains isolation staging', async () => {
@@ -180,7 +180,17 @@ test('--dry-run validates and discards staging without confirmation or apply', a
   assert.equal(await main(['upgrade', '--dry-run'], dependencies), 0)
   assert.deepEqual(events, ['assess', 'stage', 'discard'])
   assert.match(logs.at(-1) ?? '', /隔离验证通过/)
-  assert.match(logs.at(-1) ?? '', /候选发现 1\.0s，隔离验证 1\.0s/)
+  assert.doesNotMatch(logs.at(-1) ?? '', /用时：/)
+})
+
+test('--verbose shows phase timings for diagnostics', async () => {
+  const events: string[] = []
+  const logs: string[] = []
+  const dependencies = flowDependencies(events, logs)
+  dependencies.confirm = async () => true
+
+  assert.equal(await main(['upgrade', '--verbose'], dependencies), 0)
+  assert.match(logs.at(-1) ?? '', /候选发现 1\.0s，隔离验证 1\.0s，应用与恢复 1\.0s/)
 })
 
 test('--json reports phase timings in milliseconds without applying', async () => {

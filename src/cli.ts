@@ -18,7 +18,7 @@ import {
 } from './upgrade.js'
 import type { AssessmentReceipt } from './core/types.js'
 
-const VERSION = '0.2.2'
+const VERSION = '0.2.3'
 
 export interface CliOptions {
   command: 'status' | 'upgrade'
@@ -68,6 +68,12 @@ function renderTimings(timings: UpgradeTimings): string {
     timings.applyMs === undefined ? null : `应用与恢复 ${formatDuration(timings.applyMs)}`,
   ].filter((value): value is string => value !== null)
   return phases.length === 0 ? '' : `用时：${phases.join('，')}。`
+}
+
+function appendVerboseTimings(message: string, timings: UpgradeTimings, verbose: boolean): string {
+  if (!verbose) return message
+  const timing = renderTimings(timings)
+  return timing === '' ? message : `${message}\n${timing}`
 }
 function usage(): string {
   return `dshctl ${VERSION}
@@ -208,7 +214,11 @@ export async function main(
     if (receipt.summary.recommendedUpdates === 0) {
       spinner.stop()
       if (options.json) log(JSON.stringify({ outcome: 'current', assessment: receipt, timings: normalizedTimings(timings) }, null, 2))
-      else log(`已经是当前兼容范围内的推荐状态。\n\n${renderHuman(receipt, { verbose: options.verbose })}\n${renderTimings(timings)}`)
+      else log(appendVerboseTimings(
+        `已经是当前兼容范围内的推荐状态。\n\n${renderHuman(receipt, { verbose: options.verbose })}`,
+        timings,
+        options.verbose,
+      ))
       return receipt.summary.blocked > 0 ? 1 : 0
     }
 
@@ -221,7 +231,11 @@ export async function main(
         return 2
       }
       if (!options.yes && !await confirm()) {
-        log(`已取消；未下载候选包或执行隔离安装，现有 profile 没有变化。\n${renderTimings(timings)}`)
+        log(appendVerboseTimings(
+          '已取消；未下载候选包或执行隔离安装，现有 profile 没有变化。',
+          timings,
+          options.verbose,
+        ))
         return 0
       }
       spinner.start('正在建立无凭据隔离环境')
@@ -241,7 +255,11 @@ export async function main(
     if (auditOnly) {
       discard(plan)
       if (options.json) log(JSON.stringify({ outcome: 'staged', applied: false, assessment: receipt, plan, timings: normalizedTimings(timings) }, null, 2))
-      else log(`${renderUpgradePlan(receipt, plan, { verbose: options.verbose })}\n\n--dry-run：未修改现有 profile。\n${renderTimings(timings)}`)
+      else log(appendVerboseTimings(
+        `${renderUpgradePlan(receipt, plan, { verbose: options.verbose })}\n\n--dry-run：未修改现有 profile。`,
+        timings,
+        options.verbose,
+      ))
       return 0
     }
 
@@ -255,12 +273,12 @@ export async function main(
     }
     spinner.stop()
     if (options.json) log(JSON.stringify({ outcome: 'applied', assessment: receipt, plan, result, timings: normalizedTimings(timings) }, null, 2))
-    else log(`${renderApplyResult(plan, result)}\n${renderTimings(timings)}`)
+    else log(appendVerboseTimings(renderApplyResult(plan, result), timings, options.verbose))
     return 0
   } catch (caught) {
     spinner.stop()
     const message = caught instanceof Error ? caught.message : String(caught)
-    const timing = options.command === 'upgrade' ? renderTimings(timings) : ''
+    const timing = options.command === 'upgrade' && options.verbose ? renderTimings(timings) : ''
     error(`错误: ${message}${timing === '' ? '' : `\n${timing}`}`)
     return 1
   }

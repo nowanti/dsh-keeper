@@ -489,9 +489,6 @@ export async function assessEnvironment(options: AssessmentOptions): Promise<Ass
     mapLimit(inventories, 2, inventory => assessProfile(inventory, dshVersionForEvaluation, options, adapters, hostVersions)),
   ])
 
-  const notices = options.command === 'upgrade'
-    ? ['候选检查本身不会写入 profile；推荐项仍须通过隔离安装与配置验证。']
-    : ['status 只读取本地状态，没有查询插件更新。']
   options.onProgress?.('正在整理检查结论')
   return {
     schemaVersion: 1,
@@ -501,6 +498,6 @@ export async function assessEnvironment(options: AssessmentOptions): Promise<Ass
     core,
     profiles,
     summary: summarize(profiles),
-    notices,
+    notices: [],
   }
 }

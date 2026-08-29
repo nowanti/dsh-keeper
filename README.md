@@ -56,9 +56,21 @@ dshctl status
 - `status`：只检查本地状态和配置，不查询更新。
 
 在交互终端中，耗时检查会显示单行旋转状态并动态更新当前 package；最终结果生成后自动清除。`--json` 或管道输出不会混入进度字符。
-升级结果同时记录候选发现、隔离验证、应用与恢复三个阶段的耗时，JSON 输出使用毫秒数，便于定位等待来自哪一阶段。
+`--verbose` 会显示候选发现、隔离验证、应用与恢复三个阶段的耗时；JSON 输出使用毫秒数。默认成功输出不展示这些内部诊断。
 
 可通过 `DSH_HOME` 指向其他 DSH home，通过 `DSH_BIN` 和 `PNPM_BIN` 覆盖命令路径。测试写入必须使用临时 `DSH_HOME`。
+
+## 平台与语言状态
+
+| 平台 | 当前状态 |
+| --- | --- |
+| macOS | 已用真实 DSH profiles 验证检查、隔离升级、回滚和 Web 恢复 |
+| Linux | Node 24 Debian arm64 容器测试通过；真实 DSH profile E2E 尚未完成 |
+| Windows | 尚不支持；仍需 `.cmd` 命令启动、Windows 进程发现和终止实现 |
+
+DSH 上游本身同时建设 Linux、macOS 和 Windows：Linux 是主 CI 路径，发布矩阵包含 Linux x64/arm64、macOS arm64 和 Windows x64，Windows 另有 Wine 阻塞门禁与原生 Windows 测试。`dshctl` 不会因为上游支持某平台就自动宣称自身兼容；详细边界见 [平台与本地化](docs/PORTABILITY.md)。
+
+当前人类可读输出仍是简体中文，因此还不具备面向全球用户发布的语言条件。英文适配将以稳定 reason code 与本地化 renderer 实现，JSON 不携带随语言变化的判断文本。
 
 ## 状态含义
 
@@ -83,4 +95,4 @@ pnpm test
 pnpm build
 ```
 
-设计和安全边界见 [docs/DESIGN.md](docs/DESIGN.md) 与 [docs/SECURITY.md](docs/SECURITY.md)。
+设计和安全边界见 [docs/DESIGN.md](docs/DESIGN.md)、[docs/SECURITY.md](docs/SECURITY.md) 与 [docs/PORTABILITY.md](docs/PORTABILITY.md)。

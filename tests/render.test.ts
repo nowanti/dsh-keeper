@@ -75,6 +75,7 @@ describe('renderHuman', () => {
     const output = renderHuman(receipt(), { verbose: false })
     assert.match(output, /upgrade-me/)
     assert.doesNotMatch(output, /hold-me/)
+    assert.doesNotMatch(output, /只读/)
     assert.match(output, /1 个较新候选保持当前版本/)
   })
 
