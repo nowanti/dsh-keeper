@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+- Show every held plugin and its installed-to-newer version or commit transition by default; keep detailed compatibility reasons behind `--verbose`.
+
 ## 0.3.1
 
 - Keep lifecycle-script output out of the release pack manifest so the first npm publication can consume valid JSON.

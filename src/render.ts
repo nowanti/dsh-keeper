@@ -11,24 +11,42 @@ function shortCommit(value: string | null): string {
   return value === null ? '?' : value.slice(0, 8)
 }
 
-function dependencyLine(item: DependencyAssessment, locale: Locale): string | null {
+function heldDependencyLine(
+  item: DependencyAssessment,
+  locale: Locale,
+  verbose: boolean,
+  name: string = item.name,
+): string {
+  const from = item.source === 'github' && item.git?.updateAvailable
+    ? shortCommit(item.git.currentCommit)
+    : item.installedVersion ?? '?'
+  const to = item.source === 'github' && item.git?.updateAvailable
+    ? shortCommit(item.git.headCommit)
+    : item.latestVersion ?? translate(locale, 'fallback.newerCandidate')
+  if (!verbose) return translate(locale, 'render.holdCompact', { name, from, to })
+  if (item.source === 'github' && item.git?.updateAvailable) {
+    return translate(locale, 'render.gitHold', { name, from, to })
+  }
+  const reason = item.latestEvaluation?.blockers[0]
+    ?? item.latestEvaluation?.warnings[0]
+    ?? item.messages[0]
+  return translate(locale, 'render.hold', {
+    name,
+    from,
+    to,
+    reason: reason === undefined ? translate(locale, 'fallback.notValidated') : translateDiagnostic(locale, reason),
+  })
+}
+
+function dependencyLine(item: DependencyAssessment, locale: Locale, verbose: boolean): string | null {
   if (item.status === 'upgrade' && item.recommended !== null) {
     return translate(locale, 'render.upgradeDeclared', { name: item.name, from: item.installedVersion ?? '?', to: item.recommended.version })
   }
   if (item.source === 'github' && item.git !== null && item.git.updateAvailable) {
-    return translate(locale, 'render.gitHold', { name: item.name, from: shortCommit(item.git.currentCommit), to: shortCommit(item.git.headCommit) })
+    return heldDependencyLine(item, locale, verbose)
   }
   if (item.status === 'hold') {
-    const target = item.latestVersion ?? translate(locale, 'fallback.newerCandidate')
-    const reason = item.latestEvaluation?.blockers[0]
-      ?? item.latestEvaluation?.warnings[0]
-      ?? item.messages[0]
-    return translate(locale, 'render.hold', {
-      name: item.name,
-      from: item.installedVersion ?? '?',
-      to: target,
-      reason: reason === undefined ? translate(locale, 'fallback.notValidated') : translateDiagnostic(locale, reason),
-    })
+    return heldDependencyLine(item, locale, verbose)
   }
   if (item.status === 'unknown') {
     return translate(locale, 'render.unknown', { name: item.name, reason: item.messages[0] === undefined ? translate(locale, 'fallback.insufficientEvidence') : translateDiagnostic(locale, item.messages[0]) })
@@ -58,15 +76,10 @@ export function renderHuman(receipt: AssessmentReceipt, options: RenderOptions):
     const config = translate(locale, profile.config === 'passed' ? 'render.configPassed' : profile.config === 'failed' ? 'render.configFailed' : 'render.configSkipped')
     lines.push(translate(locale, 'render.profile', { mark: configMark, name: profile.name, dependencies: profile.dependencyCount, bundles: profile.bundleCount, config }))
     const visible = profile.dependencies
-      .filter(item => options.verbose || item.status !== 'hold')
-      .map(item => dependencyLine(item, locale))
+      .map(item => dependencyLine(item, locale, options.verbose))
       .filter((line): line is string => line !== null)
     if (options.verbose && visible.length === 0) lines.push(translate(locale, 'render.allCurrent'))
     else lines.push(...visible)
-    if (!options.verbose) {
-      const held = profile.dependencies.filter(item => item.status === 'hold').length
-      if (held > 0) lines.push(translate(locale, 'render.heldCollapsed', { count: held }))
-    }
     for (const warning of profile.warnings) lines.push(`  ? ${translateDiagnostic(locale, warning)}`)
   }
 
@@ -89,15 +102,15 @@ export function renderUpgradeCandidates(receipt: AssessmentReceipt, options: Ren
   const held = receipt.summary.heldUpdates
   const unknown = receipt.summary.unknown
   if (held > 0 || unknown > 0) lines.push(translate(locale, 'render.remainder', { held, unknown }))
+  lines.push(...heldCandidateLines(receipt, locale, options.verbose))
   lines.push(...unreachableRemovalAdvice(receipt, locale))
-  if (options.verbose) {
-    for (const profile of receipt.profiles) {
-      for (const item of profile.dependencies.filter(value => value.status === 'hold')) {
-        lines.push(translate(locale, 'render.verboseReason', { profile: profile.name, name: item.name, reason: item.messages[0] === undefined ? translate(locale, 'fallback.insufficientEvidence') : translateDiagnostic(locale, item.messages[0]) }))
-      }
-    }
-  }
   return lines.join('\n')
+}
+
+function heldCandidateLines(receipt: AssessmentReceipt, locale: Locale, verbose: boolean): string[] {
+  return receipt.profiles.flatMap(profile => profile.dependencies
+    .filter(item => item.status === 'hold')
+    .map(item => heldDependencyLine(item, locale, verbose, `${profile.name}/${item.name}`)))
 }
 
 function unreachableRemovalAdvice(receipt: AssessmentReceipt, locale: Locale): string[] {
@@ -120,14 +133,8 @@ export function renderUpgradePlan(receipt: AssessmentReceipt, plan: UpgradePlan,
   const held = receipt.summary.heldUpdates
   const unknown = receipt.summary.unknown
   if (held > 0 || unknown > 0) lines.push(translate(locale, 'render.remainder', { held, unknown }))
+  lines.push(...heldCandidateLines(receipt, locale, options.verbose))
   lines.push(...unreachableRemovalAdvice(receipt, locale))
-  if (options.verbose) {
-    for (const profile of receipt.profiles) {
-      for (const item of profile.dependencies.filter(value => value.status === 'hold')) {
-        lines.push(translate(locale, 'render.verboseReason', { profile: profile.name, name: item.name, reason: item.messages[0] === undefined ? translate(locale, 'fallback.insufficientEvidence') : translateDiagnostic(locale, item.messages[0]) }))
-      }
-    }
-  }
   return lines.join('\n')
 }
 
