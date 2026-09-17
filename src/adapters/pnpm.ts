@@ -75,9 +75,9 @@ export class PnpmAdapter {
     }
   }
 
-  async install(profileDir: string, options: { offline?: boolean } = {}): Promise<void> {
-    const args = ['install', '--no-frozen-lockfile']
-    if (options.offline === true) args.push('--offline')
+  async install(profileDir: string): Promise<void> {
+    // Prefetching candidates does not populate every transitive dependency's metadata.
+    const args = ['install', '--no-frozen-lockfile', '--prefer-offline']
     const result = await runCommand(this.binary, args, {
       cwd: profileDir,
       timeoutMs: 5 * 60_000,

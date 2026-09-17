@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3
+
+- Allow isolated plugin installation to fetch missing dependency metadata and artifacts while preferring cached data; fix `ERR_PNPM_NO_OFFLINE_META` when candidates introduce uncached transitive dependencies.
+- Keep exact candidate version/integrity checks and all-profile validation before switching live profiles. DSH core upgrades and Git plugin upgrades remain outside automatic switching.
+
 ## 0.3.2
 
 - Show every held plugin and its installed-to-newer version or commit transition by default; keep detailed compatibility reasons behind `--verbose`.

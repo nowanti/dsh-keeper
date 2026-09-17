@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { createServer } from 'node:http'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +9,7 @@ import test from 'node:test'
 import type { RuntimeController, RuntimeSpec } from '../src/adapters/runtime.js'
 import type { AssessmentReceipt } from '../src/core/types.js'
 import { diagnostic } from '../src/core/diagnostics.js'
+import { runCommand } from '../src/adapters/process.js'
 import { applyUpgrade, discardStage, stageUpgrade, type UpgradePlan } from '../src/upgrade.js'
 
 function temporaryDirectory(): string {
@@ -200,6 +203,83 @@ test('failed live validation restores files, node_modules and service', async ()
     assert.equal(journal.state, 'rolled-back')
     assert.equal(existsSync(plan.stagingRoot), false)
   } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('real pnpm staging fetches an uncached transitive dependency without changing live files', { timeout: 120_000 }, async () => {
+  const root = temporaryDirectory()
+  const packages = new Map<string, { manifest: Record<string, unknown>; tarball: Buffer; integrity: string }>()
+  const requests: string[] = []
+  const server = createServer((req, res) => {
+    const name = req.url?.slice(1).split('/')[0] ?? ''
+    const item = packages.get(name)
+    requests.push(req.url ?? '')
+    if (!item) { res.writeHead(404).end(); return }
+    if (req.url?.endsWith('.tgz')) { res.end(item.tarball); return }
+    const address = server.address()
+    assert.ok(address && typeof address !== 'string')
+    const version = item.manifest.version as string
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify({
+      name, 'dist-tags': { latest: version }, versions: {
+        [version]: { ...item.manifest, dist: {
+          integrity: item.integrity,
+          tarball: `http://127.0.0.1:${address.port}/${name}/package.tgz`,
+        } },
+      },
+    }))
+  })
+  try {
+    for (const manifest of [
+      { name: 'example-plugin', version: '2.0.0', dependencies: { 'fixture-transitive': '1.0.0' } },
+      { name: 'fixture-transitive', version: '1.0.0' },
+    ]) {
+      const path = join(root, 'packages', manifest.name)
+      writeJson(join(path, 'package.json'), manifest)
+      const packed = await runCommand('npm', ['pack', '--ignore-scripts', '--json'], { cwd: path, timeoutMs: 30_000 })
+      assert.equal(packed.code, 0, packed.stderr)
+      const tarball = readFileSync(join(path, `${manifest.name}-${manifest.version}.tgz`))
+      packages.set(manifest.name, { manifest, tarball, integrity: `sha512-${createHash('sha512').update(tarball).digest('base64')}` })
+    }
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    assert.ok(address && typeof address !== 'string')
+    const receipt = fixtureReceipt(root)
+    const candidate = receipt.profiles[0]!.dependencies[0]!.recommended!
+    candidate.integrity = packages.get('example-plugin')!.integrity
+    const livePath = receipt.profiles[0]!.path
+    const liveManifest = readFileSync(join(livePath, 'package.json'), 'utf8')
+    const liveLock = readFileSync(join(livePath, 'pnpm-lock.yaml'), 'utf8')
+    const userconfig = join(root, 'npmrc')
+    writeFileSync(userconfig, '')
+    const plan = await stageUpgrade(receipt, {
+      env: {
+        ...process.env,
+        PNPM_BIN: 'pnpm',
+        npm_config_registry: `http://127.0.0.1:${address.port}/`,
+        npm_config_store_dir: join(root, 'store'),
+        npm_config_cache_dir: join(root, 'cache'),
+        npm_config_state_dir: join(root, 'state'),
+        npm_config_userconfig: userconfig,
+        npm_config_ignore_scripts: 'true',
+      },
+      checkProfile: async () => true,
+    })
+    assert.ok(plan)
+    const staged = plan.profiles[0]!.stagedPath
+    const installed = JSON.parse(readFileSync(join(staged, 'node_modules', 'example-plugin', 'package.json'), 'utf8'))
+    assert.equal(installed.version, '2.0.0')
+    assert.match(readFileSync(join(staged, 'pnpm-lock.yaml'), 'utf8'), /fixture-transitive@1\.0\.0/)
+    assert.ok(requests.includes('/fixture-transitive'))
+    assert.ok(requests.includes('/fixture-transitive/package.tgz'))
+    assert.equal(readFileSync(join(livePath, 'package.json'), 'utf8'), liveManifest)
+    assert.equal(readFileSync(join(livePath, 'pnpm-lock.yaml'), 'utf8'), liveLock)
+    assert.equal(JSON.parse(readFileSync(join(livePath, 'node_modules', 'example-plugin', 'package.json'), 'utf8')).version, '1.0.0')
+    discardStage(plan)
+  } finally {
+    server.closeAllConnections()
+    await new Promise<void>(resolve => server.close(() => resolve()))
     rmSync(root, { recursive: true, force: true })
   }
 })

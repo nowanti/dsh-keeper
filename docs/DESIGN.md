@@ -52,7 +52,7 @@ discover
 - 调用 `dsh --profile <name> --dump-config`，但不输出命令原始 stderr，防止日志内容泄漏。
 - 交互终端用单行 spinner 报告当前阶段；机器输出保持纯 JSON。
 - 结果记录候选发现、隔离验证、应用与恢复的分阶段耗时；只在 `--verbose` 和 JSON 中展示，且不参与兼容性决策。
-- 将候选 npm artifacts 预取到 pnpm store，再对当前 `node_modules` 做文件系统隔离副本和增量安装。
+- 将候选 npm artifacts 预取到 pnpm store，再对当前 `node_modules` 做文件系统隔离副本和增量安装。隔离安装使用 `--prefer-offline` 优先复用缓存，缺失的依赖元数据和 artifacts 允许联网补齐；完成后仍校验候选精确版本与 integrity。
 - lockfile 已记录同一 commit tarball 的固定 Git 依赖在 staging 内复用 pnpm cache，避免每个 profile 重复访问远端；安装后恢复原 Git specifier 并验证已安装版本未变，live profile 不发生来源迁移。
 - 发现并展示精确候选后显示一次 `[Y/n]`；确认授权对这组候选执行隔离验证，并在整组通过后自动应用。隔离结果不能新增或替换已展示候选。
 - 下载、隔离安装和配置合成全部保留在升级事务中；验证失败不切换 live profile。`-y/--yes` 只跳过询问，不跳过验证。

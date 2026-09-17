@@ -230,7 +230,7 @@ export async function stageUpgrade(receipt: AssessmentReceipt, options: StageOpt
   const env = { ...(options.env ?? process.env), DSH_HOME: stagingRoot }
   const pnpm = new PnpmAdapter(env, locale)
   const dsh = new DshAdapter(env)
-  const installProfile = options.installProfile ?? (path => pnpm.install(path, { offline: true }))
+  const installProfile = options.installProfile ?? (path => pnpm.install(path))
   const checkProfile = options.checkProfile ?? (async (_home, profile) => (await dsh.checkConfig(profile)).ok)
 
   try {
